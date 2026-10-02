@@ -15,6 +15,8 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js">
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js">
+    </script>
 
     <!-- Tailwind CSS via CDN -->
     <script src="https://cdn.tailwindcss.com">
@@ -792,8 +794,9 @@
                 <div class="flex items-center justify-between mb-3">
                     <h3 class="text-sm font-semibold" style="color:var(--fg)">FP Sales • Waste • %</h3>
                     <div class="flex items-center gap-2">
-                        <span class="text-[10px] font-medium px-2 py-0.5 rounded-full border" style="color:var(--muted);border-color:var(--glass-border)">All FPs · ranked by Waste Amount · values always visible</span>
+                        <span class="text-[10px] font-medium px-2 py-0.5 rounded-full border" style="color:var(--muted);border-color:var(--glass-border)">All FPs · ranked by Waste % Sales · values always visible</span>
                         <span class="text-[10px] font-medium px-2 py-0.5 rounded-full border" style="color:var(--muted);border-color:var(--glass-border)">No hover needed</span>
+                        <button class="shad-btn shad-btn-outline shad-btn-xs" id="dlSalesBtn" title="Download Image">Image</button>
                     </div>
                 </div>
                 <div class="w-full h-[430px]" id="chartSales"></div>
@@ -1498,7 +1501,40 @@
             dlCategoryBtn.addEventListener('click', () => downloadChartImage(instCategory, 'Waste_By_Category'));
             dlFPBtn.addEventListener('click', () => downloadChartImage(instFP, 'Top_Fulfillment_Hubs'));
             dlReasonBtn.addEventListener('click', () => downloadChartImage(instReason, 'Deduction_Reason_Radar'));
-            // Sales vs Waste is rendered as a native comparison matrix; no image-export handler needed.
+            // Sales vs Waste is rendered as a native comparison matrix.
+            async function downloadSalesComparisonImage() {
+                if (!window.html2canvas || !chartSales || !salesData || salesData.length === 0) return;
+
+                const originalMaxHeight = chartSales.style.maxHeight;
+                const originalOverflowY = chartSales.style.overflowY;
+                const originalPaddingRight = chartSales.style.paddingRight;
+
+                try {
+                    chartSales.style.maxHeight = 'none';
+                    chartSales.style.overflowY = 'visible';
+                    chartSales.style.paddingRight = '0';
+
+                    const canvas = await html2canvas(chartSales, {
+                        backgroundColor: getThemeColors().card,
+                        scale: 2,
+                        useCORS: true,
+                        logging: false
+                    });
+
+                    const link = document.createElement('a');
+                    link.download = 'FP_Sales_Waste_Comparison.png';
+                    link.href = canvas.toDataURL('image/png');
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                } finally {
+                    chartSales.style.maxHeight = originalMaxHeight;
+                    chartSales.style.overflowY = originalOverflowY;
+                    chartSales.style.paddingRight = originalPaddingRight;
+                }
+            }
+
+            dlSalesBtn.addEventListener('click', downloadSalesComparisonImage);
 
             // ─── Render Charts ───
             function renderSalesChart(rows) {
@@ -1509,7 +1545,10 @@
 
                 chartSales.parentElement.classList.remove('hidden');
 
-                const sorted = rows.slice().sort((a, b) => b.wasteAmount - a.wasteAmount);
+                const sorted = rows.slice().sort((a, b) => {
+                    const pctDiff = safeNum(b.wastePct) - safeNum(a.wastePct);
+                    return pctDiff !== 0 ? pctDiff : safeNum(b.wasteAmount) - safeNum(a.wasteAmount);
+                });
                 const maxSales = Math.max(...sorted.map(r => safeNum(r.salesAmount)), 1);
                 const maxWaste = Math.max(...sorted.map(r => safeNum(r.wasteAmount)), 1);
 
