@@ -790,12 +790,12 @@
 
             <div class="chart-card lg:col-span-2">
                 <div class="flex items-center justify-between mb-3">
-                    <h3 class="text-sm font-semibold" style="color:var(--fg)">Sales vs Waste — FP Landscape</h3>
+                    <h3 class="text-sm font-semibold" style="color:var(--fg)">Waste % of Sales — FP Ranking</h3>
                     <div class="flex items-center gap-1">
                         <button class="shad-btn shad-btn-outline shad-btn-xs" id="dlSalesBtn" title="Download Image">Image</button>
                     </div>
                 </div>
-                <div class="w-full h-[380px]" id="chartSales"></div>
+                <div class="w-full h-[430px]" id="chartSales"></div>
             </div>
 
             <div class="chart-card lg:col-span-2">
@@ -1461,24 +1461,15 @@
                     extraCssText: 'box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08); border-radius: 8px;'
                 };
 
-                // All branches stay visible. The largest bubbles and labels identify the
-                // highest-waste FPs without forcing dozens of branch names onto the axis.
-                const sortedByWaste = rows.slice().sort((a, b) => b.wasteAmount - a.wasteAmount);
-                const topLabels = new Set(sortedByWaste.slice(0, 8).map(r => r.fp));
-                const maxWaste = Math.max(...rows.map(r => safeNum(r.wasteAmount)), 1);
-                const avgWastePct = rows.reduce((sum, r) => sum + safeNum(r.wastePct), 0) / rows.length;
-
-                const points = rows.map(row => ({
-                    name: row.fp,
-                    value: [
-                        safeNum(row.salesAmount),
-                        safeNum(row.wastePct),
-                        safeNum(row.wasteAmount),
-                        safeNum(row.qtySold),
-                        safeNum(row.wasteQty)
-                    ],
-                    row
-                }));
+                // Ranked ratio view: top performers are visible immediately, while the
+                // vertical data-zoom lets the user scroll through every FP.
+                const sorted = rows.slice().sort((a, b) => b.wastePct - a.wastePct);
+                const names = sorted.map(r => r.fp);
+                const values = sorted.map(r => safeNum(r.wastePct));
+                const visibleEnd = names.length > 10 ? Math.min(100, (10 / names.length) * 100) : 100;
+                const topRanked = new Set(sorted.slice(0, 10).map(r => r.fp));
+                const maxPct = Math.max(...values, 1);
+                const avgPct = values.reduce((sum, value) => sum + value, 0) / values.length;
 
                 if (!instSales) instSales = echarts.init(chartSales);
                 instSales.setOption({
@@ -1490,71 +1481,90 @@
                             if (!row) return '';
                             return [
                                 '<strong>' + row.fp + '</strong>',
-                                'Sales: <strong>' + row.salesAmount.toLocaleString() + ' EGP</strong>',
+                                'Waste % of Sales: <strong>' + row.wastePct.toFixed(2) + '%</strong>',
                                 'Waste: <strong>' + row.wasteAmount.toLocaleString() + ' EGP</strong>',
-                                'Waste %: <strong>' + row.wastePct.toFixed(2) + '%</strong>',
+                                'Sales: <strong>' + row.salesAmount.toLocaleString() + ' EGP</strong>',
                                 'Qty Sold: <strong>' + row.qtySold.toLocaleString() + '</strong>',
                                 'Waste Qty: <strong>' + row.wasteQty.toLocaleString() + '</strong>'
                             ].join('<br/>');
                         }
                     },
-                    grid: { left: '7%', right: '5%', top: '8%', bottom: '14%', containLabel: true },
+                    grid: { left: '22%', right: '8%', top: '5%', bottom: names.length > 10 ? '15%' : '9%', containLabel: true },
                     xAxis: {
                         type: 'value',
-                        name: 'Sales Amount',
-                        nameTextStyle: textStyle,
-                        axisLabel: { ...textStyle, formatter: fmtCurrency },
-                        splitLine: { lineStyle: { color: colors.border, type: 'dashed' } }
-                    },
-                    yAxis: {
-                        type: 'value',
+                        min: 0,
+                        max: Math.max(maxPct * 1.15, avgPct * 1.5, 0.1),
                         name: 'Waste % of Sales',
                         nameTextStyle: textStyle,
                         axisLabel: { ...textStyle, formatter: (v) => v.toFixed(1) + '%' },
                         splitLine: { lineStyle: { color: colors.border, type: 'dashed' } }
                     },
+                    yAxis: {
+                        type: 'category',
+                        inverse: true,
+                        data: names,
+                        axisLabel: {
+                            ...textStyle,
+                            fontSize: 10,
+                            formatter: (name) => topRanked.has(name) ? truncate(name, 24) : truncate(name, 18)
+                        }
+                    },
+                    dataZoom: names.length > 10 ? [
+                        {
+                            type: 'slider',
+                            yAxisIndex: 0,
+                            right: 8,
+                            top: '6%',
+                            bottom: '16%',
+                            width: 14,
+                            start: 0,
+                            end: visibleEnd,
+                            handleSize: '75%',
+                            textStyle,
+                            borderColor: colors.border,
+                            fillerColor: colors.accent1 + '20',
+                            backgroundColor: colors.card
+                        },
+                        {
+                            type: 'inside',
+                            yAxisIndex: 0,
+                            start: 0,
+                            end: visibleEnd
+                        }
+                    ] : [],
                     series: [{
-                        name: 'FPs',
-                        type: 'scatter',
-                        data: points,
-                        symbolSize: (value) => {
-                            const waste = safeNum(value[2]);
-                            return 10 + Math.sqrt(waste / maxWaste) * 28;
-                        },
+                        name: 'Waste % of Sales',
+                        type: 'bar',
+                        data: sorted.map(row => ({ value: safeNum(row.wastePct), row })),
+                        barMaxWidth: 18,
                         itemStyle: {
-                            color: colors.accent1,
-                            opacity: 0.72
-                        },
-                        emphasis: {
-                            focus: 'self',
-                            scale: true,
-                            itemStyle: {
-                                opacity: 1
-                            }
+                            color: (params) => topRanked.has(params.data.row.fp) ? colors.accent1 : colors.accent2,
+                            borderRadius: [0, 6, 6, 0]
                         },
                         label: {
                             show: true,
-                            formatter: (params) => topLabels.has(params.data.name) ? truncate(params.data.name, 20) : '',
-                            position: 'top',
+                            position: 'right',
+                            formatter: (params) => topRanked.has(params.data.row.fp)
+                                ? params.data.value.toFixed(2) + '%'
+                                : '',
                             color: colors.fg,
-                            fontSize: 10,
+                            fontSize: 9,
                             fontWeight: 700
-                        },
-                        labelLayout: {
-                            hideOverlap: true
                         },
                         markLine: {
                             silent: true,
                             symbol: 'none',
                             label: {
-                                formatter: 'Average Waste %'
+                                formatter: 'Average ' + avgPct.toFixed(2) + '%',
+                                color: colors.accent2,
+                                fontSize: 10
                             },
                             lineStyle: {
                                 type: 'dashed',
                                 color: colors.accent2,
                                 width: 1.5
                             },
-                            data: [{ yAxis: avgWastePct }]
+                            data: [{ xAxis: avgPct }]
                         }
                     }]
                 });
