@@ -2310,7 +2310,7 @@
                             textStyle: { lineHeight: 14, align: 'center' }
                         },
                         splitLine: { lineStyle: { color: colors.border } },
-                        splitArea: { areaStyle: { color: ['rgba(139,92,246,0.02)', 'rgba(6,182,212,0.02)'] } },
+                        splitArea: { areaStyle: { color: ['rgba(170,3,130,0.025)', 'rgba(201,74,165,0.018)'] } },
                         axisLine: { lineStyle: { color: colors.border } }
                     },
                     series: [{
@@ -2570,8 +2570,8 @@
                     headerSubtitle.style.display = '';
                     headerSubtitle.textContent = '. All Months';
                     headerTitle.textContent = 'FPs Beauty Waste Report';
-                    headerLogoImg.style.display = 'none';
-                    document.querySelector('.header-logo-svg').style.display = 'flex';
+                    headerLogoImg.style.display = 'block';
+                    document.querySelector('.header-logo-svg').style.display = 'none';
                     document.body.classList.remove('viewer-mode');
                 }
                 updateHeaderWithMonths();
