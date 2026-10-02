@@ -15,6 +15,8 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js">
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js">
+    </script>
 
     <!-- Tailwind CSS via CDN -->
     <script src="https://cdn.tailwindcss.com">
@@ -282,6 +284,11 @@
         @media(min-width:640px) {
             #metricsGrid {
                 grid-template-columns: repeat(4, 1fr);
+            }
+        }
+        @media(min-width:1024px) {
+            #metricsGrid {
+                grid-template-columns: repeat(5, 1fr);
             }
         }
         .shad-metric {
@@ -690,7 +697,7 @@
                     <line x1="12" y1="16" x2="12" y2="12" />
                     <line x1="12" y1="8" x2="12.01" y2="8" />
                 </svg>
-                <span>Filters entries with Validation = "Real Waste"</span>
+                <span>Filters entries with Validation = "Real Waste" · optional <strong>Sales</strong> sheet adds Sales vs Waste analysis</span>
             </div>
         </div>
 
@@ -781,6 +788,18 @@
                     </div>
                 </div>
                 <div class="w-full h-[320px]" id="chartFP"></div>
+            </div>
+
+            <div class="chart-card lg:col-span-2">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-semibold" style="color:var(--fg)">FP Sales • Waste • %</h3>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] font-medium px-2 py-0.5 rounded-full border" style="color:var(--muted);border-color:var(--glass-border)">All FPs · ranked by Waste % Sales · values always visible</span>
+                        <span class="text-[10px] font-medium px-2 py-0.5 rounded-full border" style="color:var(--muted);border-color:var(--glass-border)">No hover needed</span>
+                        <button class="shad-btn shad-btn-outline shad-btn-xs" id="dlSalesBtn" title="Download Image">Image</button>
+                    </div>
+                </div>
+                <div class="w-full h-[430px]" id="chartSales"></div>
             </div>
 
             <div class="chart-card lg:col-span-2">
@@ -891,6 +910,7 @@
             const chartCategory = document.getElementById('chartCategory');
             const chartFP = document.getElementById('chartFP');
             const chartReason = document.getElementById('chartReason');
+            const chartSales = document.getElementById('chartSales');
 
             const tableBody = document.getElementById('tableBody');
             const tableSearch = document.getElementById('tableSearch');
@@ -903,11 +923,13 @@
             const dlCategoryBtn = document.getElementById('dlCategoryBtn');
             const dlFPBtn = document.getElementById('dlFPBtn');
             const dlReasonBtn = document.getElementById('dlReasonBtn');
+            const dlSalesBtn = document.getElementById('dlSalesBtn');
 
-            let instTrend, instCategory, instFP, instReason;
+            let instTrend, instCategory, instFP, instReason, instSales;
 
             // ─── State ───
             let rawData = [];
+            let salesData = [];
             let currentFilteredData = [];
             let currentPage = 1;
             const pageSize = 10;
@@ -940,8 +962,15 @@
             }
 
             function safeNum(v) {
-                const n = parseFloat(v);
-                return isNaN(n) ? 0 : n;
+                if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+                if (v === null || v === undefined || v === '') return 0;
+                const cleaned = String(v)
+                    .replace(/,/g, '')
+                    .replace(/%/g, '')
+                    .replace(/EGP/gi, '')
+                    .trim();
+                const n = Number(cleaned);
+                return Number.isFinite(n) ? n : 0;
             }
 
             function truncate(str, len) {
@@ -983,17 +1012,16 @@
                 return costLike || null;
             }
 
-            // ─── Parser ───
-            function parseExcelFile(data) {
-                const wb = XLSX.read(data, { type: 'array' });
+            // ─── Parsers ───
+            function parseWasteSheet(wb) {
                 const ws = wb.Sheets[wb.SheetNames[0]];
+                if (!ws) return [];
                 const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
                 if (!json || json.length === 0) return [];
                 const headers = Object.keys(json[0]);
 
                 const colTotal = findBestColumn(headers, ['Total Cost', 'Total', 'Cost']);
-                const matchCol = (keys) => headers.find(h => keys.some(k => h.toLowerCase().trim() === k.toLowerCase()
-                .trim()));
+                const matchCol = (keys) => headers.find(h => keys.some(k => h.toLowerCase().trim() === k.toLowerCase().trim()));
                 const colMonth = matchCol(['Month']);
                 const colFP = matchCol(['Fp Name', 'FP Name', 'Fulfillment Center']);
                 const colCat = matchCol(['Internal Cat', 'Internal Category', 'Category']);
@@ -1009,24 +1037,137 @@
                     const month = String(row[colMonth] || '').trim();
                     const total = safeNum(row[colTotal]);
                     const qty = colQty ? safeNum(row[colQty]) : 0;
-
                     if (!validation.toLowerCase().includes('real')) continue;
                     if (!month) continue;
 
                     rows.push({
-                        month: month,
+                        month,
                         fp: String(row[colFP] || 'Unassigned').trim(),
                         category: String(row[colCat] || 'Uncategorized').trim(),
                         reason: String(row[colReason] || 'Other').trim(),
-                        total: total,
-                        qty: qty,
+                        total,
+                        qty,
                         _original: { ...row }
                     });
                 }
                 return rows;
             }
 
+            function parseSalesSheet(wb) {
+                if (!wb || !Array.isArray(wb.SheetNames) || wb.SheetNames.length < 2) return [];
+
+                const normalizeHeader = (value) => String(value || '')
+                    .toLowerCase()
+                    .replace(/\s+/g, ' ')
+                    .trim();
+
+                const findColumn = (headers, candidates) => {
+                    const normalized = headers.map(h => ({ raw: h, norm: normalizeHeader(h) }));
+                    for (const candidate of candidates) {
+                        const wanted = normalizeHeader(candidate);
+                        const exact = normalized.find(h => h.norm === wanted);
+                        if (exact) return exact.raw;
+                    }
+                    return null;
+                };
+
+                let best = null;
+
+                // Detect the Sales sheet by its column structure instead of relying
+                // on a specific worksheet name.
+                for (const sheetName of wb.SheetNames.slice(1)) {
+                    const ws = wb.Sheets[sheetName];
+                    if (!ws) continue;
+
+                    const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
+                    if (!json || json.length === 0) continue;
+
+                    const headers = Object.keys(json[0]);
+                    const colFP = findColumn(headers, ['Fp Name', 'FP Name', 'Fulfillment Center']);
+                    const colQtySold = findColumn(headers, ['SUM of Qty Sold', 'Sum of Qty Sold', 'Qty Sold']);
+                    const colSalesAmount = findColumn(headers, [
+                        'SUM of Total Amount',
+                        'Sum of Total Amount',
+                        'Total Amount',
+                        'Sales Amount'
+                    ]);
+                    const colWasteQty = findColumn(headers, ['Sum Of Wastage Qty', 'SUM of Wastage Qty', 'Wastage Qty']);
+                    const colWasteAmount = findColumn(headers, [
+                        'Sum Of Wastage Amount',
+                        'SUM of Wastage Amount',
+                        'Wastage Amount'
+                    ]);
+                    const colWastePct = findColumn(headers, ['Waste % Sales', 'Waste % of Sales', 'Waste Percentage']);
+
+                    const score =
+                        (colFP ? 3 : 0) +
+                        (colSalesAmount ? 3 : 0) +
+                        (colWasteAmount ? 3 : 0) +
+                        (colQtySold ? 1 : 0) +
+                        (colWasteQty ? 1 : 0) +
+                        (colWastePct ? 1 : 0) +
+                        (normalizeHeader(sheetName) === 'sales' ? 2 : 0);
+
+                    if (!colFP || !colSalesAmount || !colWasteAmount || score < 9) continue;
+
+                    if (!best || score > best.score) {
+                        best = { sheetName, json, colFP, colQtySold, colSalesAmount, colWasteQty, colWasteAmount, colWastePct, score };
+                    }
+                }
+
+                if (!best) return [];
+
+                return best.json
+                    .filter(row => {
+                        const fp = String(row[best.colFP] || '').trim();
+                        return fp && fp.toLowerCase() !== 'grand total';
+                    })
+                    .map(row => {
+                        const salesAmount = safeNum(row[best.colSalesAmount]);
+                        const wasteAmount = safeNum(row[best.colWasteAmount]);
+                        const rawWastePct = row[best.colWastePct];
+                        let wastePct = safeNum(rawWastePct);
+                        const percentCell = String(rawWastePct ?? '').includes('%');
+
+                        // Excel may return a percentage cell as 0.0222, while a text
+                        // cell may return "2.22%". Only decimal numeric percentages need *100.
+                        if (!percentCell && wastePct > 0 && wastePct < 1) wastePct *= 100;
+                        if (!wastePct && salesAmount > 0) {
+                            wastePct = (wasteAmount / salesAmount) * 100;
+                        }
+
+                        return {
+                            fp: String(row[best.colFP] || '').trim(),
+                            qtySold: best.colQtySold ? safeNum(row[best.colQtySold]) : 0,
+                            salesAmount,
+                            wasteQty: best.colWasteQty ? safeNum(row[best.colWasteQty]) : 0,
+                            wasteAmount,
+                            wastePct
+                        };
+                    });
+            }
+
             // ─── Aggregations ───
+            function processSalesSummary(rows) {
+                const salesAmount = rows.reduce((sum, r) => sum + safeNum(r.salesAmount), 0);
+                const wasteAmount = rows.reduce((sum, r) => sum + safeNum(r.wasteAmount), 0);
+                const qtySold = rows.reduce((sum, r) => sum + safeNum(r.qtySold), 0);
+                const wasteQty = rows.reduce((sum, r) => sum + safeNum(r.wasteQty), 0);
+                return {
+                    salesAmount,
+                    wasteAmount,
+                    qtySold,
+                    wasteQty,
+                    wastePct: salesAmount > 0 ? (wasteAmount / salesAmount) * 100 : 0
+                };
+            }
+
+            function getFilteredSalesData() {
+                if (!salesData || salesData.length === 0) return [];
+                const selectedFPs = getSelectedDropdownValues(dropdownFP);
+                return selectedFPs.length ? salesData.filter(row => selectedFPs.includes(row.fp)) : salesData;
+            }
+
             function processAggregations(rows) {
                 const monthMap = {},
                     catMap = {},
@@ -1168,6 +1309,7 @@
                 };
                 const viewerState = {
                     data: rawData,
+                    salesData: salesData,
                     filters: filterState,
                     config: APP_CONFIG
                 };
@@ -1359,9 +1501,159 @@
             dlCategoryBtn.addEventListener('click', () => downloadChartImage(instCategory, 'Waste_By_Category'));
             dlFPBtn.addEventListener('click', () => downloadChartImage(instFP, 'Top_Fulfillment_Hubs'));
             dlReasonBtn.addEventListener('click', () => downloadChartImage(instReason, 'Deduction_Reason_Radar'));
+            // Sales vs Waste is rendered as a native comparison matrix.
+            async function downloadSalesComparisonImage() {
+                if (!window.html2canvas || !chartSales || !salesData || salesData.length === 0) return;
+
+                const originalMaxHeight = chartSales.style.maxHeight;
+                const originalOverflowY = chartSales.style.overflowY;
+                const originalPaddingRight = chartSales.style.paddingRight;
+
+                try {
+                    chartSales.style.maxHeight = 'none';
+                    chartSales.style.overflowY = 'visible';
+                    chartSales.style.paddingRight = '0';
+
+                    const canvas = await html2canvas(chartSales, {
+                        backgroundColor: getThemeColors().card,
+                        scale: 2,
+                        useCORS: true,
+                        logging: false
+                    });
+
+                    const link = document.createElement('a');
+                    link.download = 'FP_Sales_Waste_Comparison.png';
+                    link.href = canvas.toDataURL('image/png');
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                } finally {
+                    chartSales.style.maxHeight = originalMaxHeight;
+                    chartSales.style.overflowY = originalOverflowY;
+                    chartSales.style.paddingRight = originalPaddingRight;
+                }
+            }
+
+            dlSalesBtn.addEventListener('click', downloadSalesComparisonImage);
 
             // ─── Render Charts ───
-            function renderCharts(agg, trendAgg) {
+            function renderSalesChart(rows) {
+                if (!salesData || salesData.length === 0 || !rows || rows.length === 0) {
+                    chartSales.parentElement.classList.add('hidden');
+                    return;
+                }
+
+                chartSales.parentElement.classList.remove('hidden');
+
+                const sorted = rows.slice().sort((a, b) => {
+                    const pctDiff = safeNum(b.wastePct) - safeNum(a.wastePct);
+                    return pctDiff !== 0 ? pctDiff : safeNum(b.wasteAmount) - safeNum(a.wasteAmount);
+                });
+                const maxSales = Math.max(...sorted.map(r => safeNum(r.salesAmount)), 1);
+                const maxWaste = Math.max(...sorted.map(r => safeNum(r.wasteAmount)), 1);
+
+                chartSales.innerHTML = '';
+                chartSales.style.height = '';
+                chartSales.style.maxHeight = '560px';
+                chartSales.style.overflowY = sorted.length > 12 ? 'auto' : 'visible';
+                chartSales.style.paddingRight = sorted.length > 12 ? '8px' : '0';
+
+                const header = document.createElement('div');
+                header.style.cssText = [
+                    'display:grid',
+                    'grid-template-columns:minmax(150px,1.15fr) minmax(180px,2fr) 90px minmax(150px,1.4fr) 90px 78px',
+                    'gap:10px',
+                    'align-items:center',
+                    'position:sticky',
+                    'top:0',
+                    'z-index:2',
+                    'padding:8px 6px',
+                    'background:var(--card)',
+                    'border-bottom:1px solid var(--border-light)',
+                    'font-size:10px',
+                    'font-weight:800',
+                    'text-transform:uppercase',
+                    'letter-spacing:.05em',
+                    'color:var(--muted)'
+                ].join(';');
+                header.innerHTML = '<div>FP</div><div>Sales</div><div>Sales EGP</div><div>Waste</div><div>Waste EGP</div><div>Waste %</div>';
+                chartSales.appendChild(header);
+
+                const list = document.createElement('div');
+                list.style.cssText = 'display:flex;flex-direction:column;gap:3px;padding-top:4px;';
+
+                sorted.forEach((row, index) => {
+                    const sales = safeNum(row.salesAmount);
+                    const waste = safeNum(row.wasteAmount);
+                    const salesWidth = Math.max(1.5, (sales / maxSales) * 100);
+                    const wasteWidth = Math.max(1.5, (waste / maxWaste) * 100);
+                    const isTop = index < 10;
+                    const pct = safeNum(row.wastePct);
+
+                    const item = document.createElement('div');
+                    item.style.cssText = [
+                        'display:grid',
+                        'grid-template-columns:minmax(150px,1.15fr) minmax(180px,2fr) 90px minmax(150px,1.4fr) 90px 78px',
+                        'gap:10px',
+                        'align-items:center',
+                        'min-height:32px',
+                        'padding:4px 6px',
+                        'border-radius:8px',
+                        isTop ? 'background:rgba(79,70,229,.045)' : 'background:transparent'
+                    ].join(';');
+
+                    const fp = document.createElement('div');
+                    fp.textContent = (index + 1) + '. ' + row.fp;
+                    fp.style.cssText = [
+                        'font-size:10px',
+                        'font-weight:' + (isTop ? '800' : '600'),
+                        'color:var(--fg)',
+                        'white-space:nowrap',
+                        'overflow:hidden',
+                        'text-overflow:ellipsis'
+                    ].join(';');
+
+                    const salesBar = document.createElement('div');
+                    salesBar.style.cssText = 'height:10px;border-radius:999px;background:var(--border-light);overflow:hidden;';
+                    salesBar.innerHTML = '<div style="height:100%;width:' + salesWidth + '%;background:var(--accent-1);border-radius:999px;"></div>';
+
+                    const salesValue = document.createElement('div');
+                    salesValue.textContent = fmtCurrency(sales);
+                    salesValue.style.cssText = 'font-size:10px;font-weight:750;color:var(--fg);text-align:right;white-space:nowrap;';
+
+                    const wasteBar = document.createElement('div');
+                    wasteBar.style.cssText = 'height:10px;border-radius:999px;background:var(--border-light);overflow:hidden;';
+                    wasteBar.innerHTML = '<div style="height:100%;width:' + wasteWidth + '%;background:var(--accent-2);border-radius:999px;"></div>';
+
+                    const wasteValue = document.createElement('div');
+                    wasteValue.textContent = fmtCurrency(waste);
+                    wasteValue.style.cssText = 'font-size:10px;font-weight:800;color:var(--accent-2);text-align:right;white-space:nowrap;';
+
+                    const pctValue = document.createElement('div');
+                    pctValue.textContent = pct.toFixed(2) + '%';
+                    pctValue.style.cssText = [
+                        'font-size:10px',
+                        'font-weight:850',
+                        'text-align:center',
+                        'padding:4px 5px',
+                        'border-radius:999px',
+                        'background:' + (pct > 1 ? 'rgba(225,29,72,.10)' : 'rgba(5,150,105,.10)'),
+                        'color:' + (pct > 1 ? '#e11d48' : '#059669')
+                    ].join(';');
+
+                    item.appendChild(fp);
+                    item.appendChild(salesBar);
+                    item.appendChild(salesValue);
+                    item.appendChild(wasteBar);
+                    item.appendChild(wasteValue);
+                    item.appendChild(pctValue);
+                    list.appendChild(item);
+                });
+
+                chartSales.appendChild(list);
+            }
+
+            function renderCharts(agg, trendAgg, salesRows = []) {
                 const colors = getThemeColors();
                 const textStyle = { color: colors.muted, fontFamily: 'Plus Jakarta Sans, Inter, sans-serif' };
                 const splitLine = { lineStyle: { color: colors.border, type: 'dashed' } };
@@ -1508,6 +1800,9 @@
                         }
                     }]
                 });
+
+                // ─── Sales vs Waste ───
+                renderSalesChart(salesRows);
 
                 // ─── Reason Radar ───
                 if (!instReason) instReason = echarts.init(chartReason);
@@ -1709,11 +2004,30 @@
                     </div>
                 `;
 
+                const filteredSales = getFilteredSalesData();
+                const salesSummary = processSalesSummary(filteredSales);
+
+                if (salesData.length > 0) {
+                    metricsGrid.insertAdjacentHTML('beforeend', `
+                        <div class="shad-metric">
+                            <div class="shad-metric-icon">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${colors.accent2}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M3 3v18h18" />
+                                    <path d="M7 15l4-4 3 2 5-6" />
+                                </svg>
+                            </div>
+                            <div class="shad-metric-title">Waste % Sales</div>
+                            <div class="shad-metric-value">${salesSummary.wastePct.toFixed(2)}%</div>
+                            <div class="shad-metric-sub">${fmtCurrency(salesSummary.wasteAmount)} waste / ${fmtCurrency(salesSummary.salesAmount)} sales</div>
+                        </div>
+                    `);
+                }
+
                 chartsGrid.classList.remove('hidden');
                 tableCard.classList.remove('hidden');
                 uploadZone.classList.add('hidden');
                 updateTable();
-                renderCharts(agg, trendAgg);
+                renderCharts(agg, trendAgg, filteredSales);
             }
 
             // ─── File Handlers ───
@@ -1724,7 +2038,9 @@
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     const data = new Uint8Array(e.target.result);
-                    rawData = parseExcelFile(data);
+                    const wb = XLSX.read(data, { type: 'array' });
+                    rawData = parseWasteSheet(wb);
+                    salesData = parseSalesSheet(wb);
                     renderDashboard(rawData, rawData, true);
                 };
                 reader.readAsArrayBuffer(file);
@@ -1767,6 +2083,7 @@
 
             clearBtn.addEventListener('click', () => {
                 rawData = [];
+                salesData = [];
                 currentFilteredData = [];
                 fileInput.value = '';
                 fileName.textContent = 'No file';
@@ -1795,6 +2112,7 @@
             if (window.VIEWER_STATE && window.VIEWER_STATE.data && window.VIEWER_STATE.data.length > 0) {
                 isViewerMode = true;
                 rawData = window.VIEWER_STATE.data;
+                salesData = Array.isArray(window.VIEWER_STATE.salesData) ? window.VIEWER_STATE.salesData : [];
                 document.querySelectorAll('.admin-only').forEach(el => el.classList.add('hidden'));
                 liveBadge.classList.add('hidden');
 
@@ -1832,6 +2150,7 @@
             } else if (window.EMBEDDED_DATA && Array.isArray(window.EMBEDDED_DATA) && window.EMBEDDED_DATA.length > 0) {
                 isViewerMode = true;
                 rawData = window.EMBEDDED_DATA;
+                salesData = [];
                 document.querySelectorAll('.admin-only').forEach(el => el.classList.add('hidden'));
                 liveBadge.classList.add('hidden');
 
@@ -1877,7 +2196,7 @@
                 if (rawData && rawData.length > 0) {
                     const agg = processAggregations(currentFilteredData);
                     const trendAgg = processAggregations(rawData);
-                    renderCharts(agg, trendAgg);
+                    renderCharts(agg, trendAgg, filteredSales);
                 }
                 setTimeout(() => {
                     if (instTrend) instTrend.resize();
