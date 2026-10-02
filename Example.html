@@ -1,0 +1,49 @@
+function doGet() {
+  return HtmlService.createHtmlOutputFromFile('Index')
+    .setTitle('Beauty Transit Report')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function recordVisit() {
+  console.log("🚀 recordVisit is called!");
+  
+  // Use a safe try-catch so Session.getActiveUser() can't crash the script
+  var userEmail = "Anonymous";
+  try {
+    userEmail = Session.getActiveUser().getEmail() || "Anonymous";
+  } catch (e) {
+    console.log("Could not get active user email (probably anonymous). Using 'Anonymous'.");
+  }
+
+  var now = new Date();
+  console.log("User: " + userEmail);
+  
+  // 1. Send email (with its own try-catch)
+  try {
+    MailApp.sendEmail({
+      to: "ahmed.abdelsalam@breadfast.com", // ✅ Your email
+      subject: "📊 Dashboard opened",
+      body: "Time: " + now + "\nUser: " + userEmail
+    });
+    console.log("✅ Email sent successfully!");
+  } catch (e) {
+    console.log("❌ Failed to send email: " + e);
+  }
+  
+  // 2. Log to spreadsheet (gets the first tab, no matter what it's called)
+  var sheetId = "12op8wFfYDZzDFy7wE609S3uqK90cYy3iCOecH__9cEU"; 
+  try {
+    // getSheets()[0] grabs the very first sheet in the spreadsheet
+    var sheet = SpreadsheetApp.openById(sheetId).getSheets()[0]; 
+    if (sheet) {
+      sheet.appendRow([now, userEmail]);
+      console.log("✅ Row added to sheet!");
+    } else {
+      console.log("❌ Sheet not found!");
+    }
+  } catch (e) {
+    console.log("❌ Failed to open sheet: " + e);
+  }
+  
+  console.log("🏁 Function completed without errors.");
+}
