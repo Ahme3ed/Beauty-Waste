@@ -793,7 +793,7 @@
                     <h3 class="text-sm font-semibold" style="color:var(--fg)">FP Sales • Waste • %</h3>
                     <div class="flex items-center gap-2">
                         <span class="text-[10px] font-medium px-2 py-0.5 rounded-full border" style="color:var(--muted);border-color:var(--glass-border)">All FPs · ranked by Waste Amount · values always visible</span>
-                        <button class="shad-btn shad-btn-outline shad-btn-xs" id="dlSalesBtn" title="Download Image">Image</button>
+                        <span class="text-[10px] font-medium px-2 py-0.5 rounded-full border" style="color:var(--muted);border-color:var(--glass-border)">No hover needed</span>
                     </div>
                 </div>
                 <div class="w-full h-[430px]" id="chartSales"></div>
@@ -1442,7 +1442,7 @@
             dlCategoryBtn.addEventListener('click', () => downloadChartImage(instCategory, 'Waste_By_Category'));
             dlFPBtn.addEventListener('click', () => downloadChartImage(instFP, 'Top_Fulfillment_Hubs'));
             dlReasonBtn.addEventListener('click', () => downloadChartImage(instReason, 'Deduction_Reason_Radar'));
-            dlSalesBtn.addEventListener('click', () => downloadChartImage(instSales, 'Sales_vs_Waste'));
+            // Sales vs Waste is rendered as a native comparison matrix; no image-export handler needed.
 
             // ─── Render Charts ───
             function renderSalesChart(rows) {
@@ -1452,173 +1452,110 @@
                 }
 
                 chartSales.parentElement.classList.remove('hidden');
-                const colors = getThemeColors();
-                const textStyle = { color: colors.muted, fontFamily: 'Plus Jakarta Sans, Inter, sans-serif' };
-                const tooltip = {
-                    backgroundColor: colors.card,
-                    borderColor: colors.border,
-                    borderWidth: 1,
-                    textStyle: { color: colors.fg, fontFamily: 'Plus Jakarta Sans, Inter, sans-serif' },
-                    extraCssText: 'box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08); border-radius: 8px;'
-                };
 
-                // A readable, no-hover comparison: every FP row shows the FP name,
-                // Sales, Waste, and Waste % at the same time. Bars are independently
-                // normalized so the much smaller Waste amount stays visible.
                 const sorted = rows.slice().sort((a, b) => b.wasteAmount - a.wasteAmount);
-                const names = sorted.map(r => r.fp);
                 const maxSales = Math.max(...sorted.map(r => safeNum(r.salesAmount)), 1);
                 const maxWaste = Math.max(...sorted.map(r => safeNum(r.wasteAmount)), 1);
-                const rowHeight = names.length > 30 ? 30 : names.length > 20 ? 33 : 36;
-                const chartHeight = Math.max(430, names.length * rowHeight + 90);
-                chartSales.style.height = chartHeight + 'px';
 
-                // Re-init when height changes to ensure ECharts measures the container correctly.
-                if (instSales) {
-                    instSales.dispose();
-                    instSales = null;
-                }
-                instSales = echarts.init(chartSales);
+                chartSales.innerHTML = '';
+                chartSales.style.height = '';
+                chartSales.style.maxHeight = '560px';
+                chartSales.style.overflowY = sorted.length > 12 ? 'auto' : 'visible';
+                chartSales.style.paddingRight = sorted.length > 12 ? '8px' : '0';
 
-                const salesMax = Math.max(maxSales, 1);
-                const wasteMax = Math.max(maxWaste, 1);
-                const visibleEnd = names.length > 18 ? Math.min(100, (18 / names.length) * 100) : 100;
+                const header = document.createElement('div');
+                header.style.cssText = [
+                    'display:grid',
+                    'grid-template-columns:minmax(150px,1.15fr) minmax(180px,2fr) 90px minmax(150px,1.4fr) 90px 78px',
+                    'gap:10px',
+                    'align-items:center',
+                    'position:sticky',
+                    'top:0',
+                    'z-index:2',
+                    'padding:8px 6px',
+                    'background:var(--card)',
+                    'border-bottom:1px solid var(--border-light)',
+                    'font-size:10px',
+                    'font-weight:800',
+                    'text-transform:uppercase',
+                    'letter-spacing:.05em',
+                    'color:var(--muted)'
+                ].join(';');
+                header.innerHTML = '<div>FP</div><div>Sales</div><div>Sales EGP</div><div>Waste</div><div>Waste EGP</div><div>Waste %</div>';
+                chartSales.appendChild(header);
 
-                // Normalize each metric independently so both Sales and Waste remain visible.
-                const normalizedSales = sorted.map(row => (safeNum(row.salesAmount) / salesMax) * 100);
-                const normalizedWaste = sorted.map(row => (safeNum(row.wasteAmount) / wasteMax) * 100);
+                const list = document.createElement('div');
+                list.style.cssText = 'display:flex;flex-direction:column;gap:3px;padding-top:4px;';
 
-                // Standard ECharts bars are used here for stability and predictable rendering.
-                if (!instSales) instSales = echarts.init(chartSales);
+                sorted.forEach((row, index) => {
+                    const sales = safeNum(row.salesAmount);
+                    const waste = safeNum(row.wasteAmount);
+                    const salesWidth = Math.max(1.5, (sales / maxSales) * 100);
+                    const wasteWidth = Math.max(1.5, (waste / maxWaste) * 100);
+                    const isTop = index < 10;
+                    const pct = safeNum(row.wastePct);
 
-                instSales.setOption({
-                    animation: false,
-                    tooltip: {
-                        ...tooltip,
-                        trigger: 'axis',
-                        axisPointer: { type: 'shadow' },
-                        formatter: (params) => {
-                            const idx = params[0]?.dataIndex ?? 0;
-                            const row = sorted[idx];
-                            if (!row) return '';
-                            return [
-                                '<strong>' + row.fp + '</strong>',
-                                'Sales: <strong>' + row.salesAmount.toLocaleString() + ' EGP</strong>',
-                                'Waste: <strong>' + row.wasteAmount.toLocaleString() + ' EGP</strong>',
-                                'Waste %: <strong>' + row.wastePct.toFixed(2) + '%</strong>'
-                            ].join('<br/>');
-                        }
-                    },
-                    legend: {
-                        data: ['Sales Amount', 'Waste Amount'],
-                        textStyle,
-                        top: 0,
-                        icon: 'roundRect'
-                    },
-                    grid: {
-                        left: '26%',
-                        right: '2%',
-                        top: 42,
-                        bottom: names.length > 18 ? 46 : 20,
-                        containLabel: true
-                    },
-                    xAxis: {
-                        type: 'value',
-                        min: 0,
-                        max: 100,
-                        show: false
-                    },
-                    yAxis: {
-                        type: 'category',
-                        inverse: true,
-                        data: names,
-                        axisLine: { show: false },
-                        axisTick: { show: false },
-                        axisLabel: {
-                            ...textStyle,
-                            width: 170,
-                            overflow: 'truncate',
-                            fontSize: 10,
-                            align: 'right',
-                            padding: [0, 10, 0, 0]
-                        }
-                    },
-                    dataZoom: names.length > 18 ? [
-                        {
-                            type: 'slider',
-                            yAxisIndex: 0,
-                            right: 6,
-                            top: 42,
-                            bottom: 46,
-                            width: 12,
-                            start: 0,
-                            end: visibleEnd,
-                            handleSize: '75%',
-                            borderColor: colors.border,
-                            fillerColor: colors.accent1 + '20',
-                            backgroundColor: colors.card
-                        },
-                        {
-                            type: 'inside',
-                            yAxisIndex: 0,
-                            start: 0,
-                            end: visibleEnd
-                        }
-                    ] : [],
-                    series: [
-                        {
-                            name: 'Sales Amount',
-                            type: 'bar',
-                            data: sorted.map((row, i) => ({
-                                value: normalizedSales[i],
-                                row
-                            })),
-                            barMaxWidth: 12,
-                            barGap: '25%',
-                            itemStyle: {
-                                color: colors.accent1,
-                                borderRadius: [0, 5, 5, 0],
-                                opacity: 0.82
-                            },
-                            label: {
-                                show: true,
-                                position: 'right',
-                                distance: 5,
-                                formatter: (params) => fmtCurrency(params.data.row.salesAmount),
-                                color: colors.fg,
-                                fontSize: 9,
-                                fontWeight: 700
-                            }
-                        },
-                        {
-                            name: 'Waste Amount',
-                            type: 'bar',
-                            data: sorted.map((row, i) => ({
-                                value: normalizedWaste[i],
-                                row
-                            })),
-                            barMaxWidth: 8,
-                            itemStyle: {
-                                color: colors.accent2,
-                                borderRadius: [0, 5, 5, 0],
-                                opacity: 0.95
-                            },
-                            label: {
-                                show: true,
-                                position: 'right',
-                                distance: 5,
-                                formatter: (params) => {
-                                    const row = params.data.row;
-                                    return fmtCurrency(row.wasteAmount) + '  ·  ' + row.wastePct.toFixed(2) + '%';
-                                },
-                                color: colors.accent2,
-                                fontSize: 9,
-                                fontWeight: 800
-                            }
-                        }
-                    ]
+                    const item = document.createElement('div');
+                    item.style.cssText = [
+                        'display:grid',
+                        'grid-template-columns:minmax(150px,1.15fr) minmax(180px,2fr) 90px minmax(150px,1.4fr) 90px 78px',
+                        'gap:10px',
+                        'align-items:center',
+                        'min-height:32px',
+                        'padding:4px 6px',
+                        'border-radius:8px',
+                        isTop ? 'background:rgba(79,70,229,.045)' : 'background:transparent'
+                    ].join(';');
+
+                    const fp = document.createElement('div');
+                    fp.textContent = (index + 1) + '. ' + row.fp;
+                    fp.style.cssText = [
+                        'font-size:10px',
+                        'font-weight:' + (isTop ? '800' : '600'),
+                        'color:var(--fg)',
+                        'white-space:nowrap',
+                        'overflow:hidden',
+                        'text-overflow:ellipsis'
+                    ].join(';');
+
+                    const salesBar = document.createElement('div');
+                    salesBar.style.cssText = 'height:10px;border-radius:999px;background:var(--border-light);overflow:hidden;';
+                    salesBar.innerHTML = '<div style="height:100%;width:' + salesWidth + '%;background:var(--accent-1);border-radius:999px;"></div>';
+
+                    const salesValue = document.createElement('div');
+                    salesValue.textContent = fmtCurrency(sales);
+                    salesValue.style.cssText = 'font-size:10px;font-weight:750;color:var(--fg);text-align:right;white-space:nowrap;';
+
+                    const wasteBar = document.createElement('div');
+                    wasteBar.style.cssText = 'height:10px;border-radius:999px;background:var(--border-light);overflow:hidden;';
+                    wasteBar.innerHTML = '<div style="height:100%;width:' + wasteWidth + '%;background:var(--accent-2);border-radius:999px;"></div>';
+
+                    const wasteValue = document.createElement('div');
+                    wasteValue.textContent = fmtCurrency(waste);
+                    wasteValue.style.cssText = 'font-size:10px;font-weight:800;color:var(--accent-2);text-align:right;white-space:nowrap;';
+
+                    const pctValue = document.createElement('div');
+                    pctValue.textContent = pct.toFixed(2) + '%';
+                    pctValue.style.cssText = [
+                        'font-size:10px',
+                        'font-weight:850',
+                        'text-align:center',
+                        'padding:4px 5px',
+                        'border-radius:999px',
+                        'background:' + (pct > 1 ? 'rgba(225,29,72,.10)' : 'rgba(5,150,105,.10)'),
+                        'color:' + (pct > 1 ? '#e11d48' : '#059669')
+                    ].join(';');
+
+                    item.appendChild(fp);
+                    item.appendChild(salesBar);
+                    item.appendChild(salesValue);
+                    item.appendChild(wasteBar);
+                    item.appendChild(wasteValue);
+                    item.appendChild(pctValue);
+                    list.appendChild(item);
                 });
-                instSales.resize();
+
+                chartSales.appendChild(list);
             }
 
             function renderCharts(agg, trendAgg, salesRows = []) {
