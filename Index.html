@@ -1499,15 +1499,6 @@
             dlFPBtn.addEventListener('click', () => downloadChartImage(instFP, 'Top_Fulfillment_Hubs'));
             dlReasonBtn.addEventListener('click', () => downloadChartImage(instReason, 'Deduction_Reason_Radar'));
             // Sales vs Waste is rendered as a native comparison matrix.
-            function escapeSvgText(value) {
-                return String(value ?? '')
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/"/g, '&quot;')
-                    .replace(/'/g, '&apos;');
-            }
-
             function downloadSalesComparisonImage() {
                 const rows = getFilteredSalesData().slice().sort((a, b) => {
                     const pctDiff = safeNum(b.wastePct) - safeNum(a.wastePct);
@@ -1516,112 +1507,178 @@
 
                 if (!rows.length) return;
 
-                const width = 1800;
-                const rowHeight = 46;
-                const headerHeight = 128;
-                const footerHeight = 36;
-                const height = headerHeight + (rows.length * rowHeight) + footerHeight;
-                const salesBarX = 410;
-                const salesValueX = 790;
-                const wasteBarX = 930;
-                const wasteValueX = 1310;
-                const pctX = 1450;
-                const salesBarWidth = 340;
-                const wasteBarWidth = 340;
-                const maxSales = Math.max(...rows.map(r => safeNum(r.salesAmount)), 1);
-                const maxWaste = Math.max(...rows.map(r => safeNum(r.wasteAmount)), 1);
                 const colors = getThemeColors();
+                const temp = document.createElement('div');
+                const width = 1800;
+                const rowHeight = 42;
+                const height = Math.max(560, rows.length * rowHeight + 150);
 
-                const parts = [
-                    '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '">',
-                    '<rect width="100%" height="100%" fill="' + colors.card + '"/>',
-                    '<style>text{font-family:"Plus Jakarta Sans",Arial,sans-serif}</style>',
-                    '<text x="40" y="40" font-size="26" font-weight="800" fill="' + colors.fg + '">FP Sales • Waste • %</text>',
-                    '<text x="40" y="70" font-size="13" font-weight="600" fill="' + colors.muted + '">All FPs · ranked by Waste % Sales</text>',
-                    '<text x="40" y="108" font-size="11" font-weight="800" fill="' + colors.muted + '">FP</text>',
-                    '<text x="' + salesBarX + '" y="108" font-size="11" font-weight="800" fill="' + colors.muted + '">Sales</text>',
-                    '<text x="' + salesValueX + '" y="108" font-size="11" font-weight="800" fill="' + colors.muted + '" text-anchor="end">Sales EGP</text>',
-                    '<text x="' + wasteBarX + '" y="108" font-size="11" font-weight="800" fill="' + colors.muted + '">Waste</text>',
-                    '<text x="' + wasteValueX + '" y="108" font-size="11" font-weight="800" fill="' + colors.muted + '" text-anchor="end">Waste EGP</text>',
-                    '<text x="' + (pctX + 42) + '" y="108" font-size="11" font-weight="800" fill="' + colors.muted + '" text-anchor="middle">Waste %</text>',
-                    '<line x1="36" y1="116" x2="' + (width - 36) + '" y2="116" stroke="' + colors.border + '" stroke-width="1"/>'
-                ];
+                temp.style.cssText = [
+                    'position:fixed',
+                    'left:-100000px',
+                    'top:0',
+                    'width:' + width + 'px',
+                    'height:' + height + 'px',
+                    'background:' + colors.card,
+                    'pointer-events:none',
+                    'visibility:hidden'
+                ].join(';');
 
-                rows.forEach((row, index) => {
-                    const y = headerHeight + index * rowHeight + rowHeight / 2;
-                    const sales = safeNum(row.salesAmount);
-                    const waste = safeNum(row.wasteAmount);
-                    const pct = safeNum(row.wastePct);
-                    const salesWidth = Math.max(3, (sales / maxSales) * salesBarWidth);
-                    const wasteWidth = Math.max(3, (waste / maxWaste) * wasteBarWidth);
-                    const isTop = index < 10;
-                    const rowBg = isTop ? 'rgba(79,70,229,0.05)' : 'transparent';
-                    const pctBg = pct > 1 ? 'rgba(225,29,72,0.10)' : 'rgba(5,150,105,0.10)';
-                    const pctColor = pct > 1 ? '#e11d48' : '#059669';
-                    const fp = escapeSvgText((index + 1) + '. ' + row.fp);
+                document.body.appendChild(temp);
 
-                    parts.push(
-                        '<rect x="36" y="' + (y - 18) + '" width="' + (width - 72) + '" height="36" rx="8" fill="' + rowBg + '"/>',
-                        '<text x="40" y="' + y + '" font-size="11" font-weight="' + (isTop ? '800' : '600') + '" fill="' + colors.fg + '" dominant-baseline="middle">' + fp + '</text>',
+                let exportChart = null;
 
-                        '<rect x="' + salesBarX + '" y="' + (y - 5) + '" width="' + salesBarWidth + '" height="10" rx="5" fill="' + colors.border + '"/>',
-                        '<rect x="' + salesBarX + '" y="' + (y - 5) + '" width="' + salesWidth + '" height="10" rx="5" fill="' + colors.accent1 + '"/>',
-                        '<text x="' + salesValueX + '" y="' + y + '" font-size="11" font-weight="700" fill="' + colors.fg + '" text-anchor="end" dominant-baseline="middle">' + escapeSvgText(sales.toLocaleString() + ' EGP') + '</text>',
+                try {
+                    exportChart = echarts.init(temp, null, {
+                        renderer: 'canvas',
+                        width,
+                        height
+                    });
 
-                        '<rect x="' + wasteBarX + '" y="' + (y - 5) + '" width="' + wasteBarWidth + '" height="10" rx="5" fill="' + colors.border + '"/>',
-                        '<rect x="' + wasteBarX + '" y="' + (y - 5) + '" width="' + wasteWidth + '" height="10" rx="5" fill="' + colors.accent2 + '"/>',
-                        '<text x="' + wasteValueX + '" y="' + y + '" font-size="11" font-weight="800" fill="' + colors.accent2 + '" text-anchor="end" dominant-baseline="middle">' + escapeSvgText(waste.toLocaleString() + ' EGP') + '</text>',
+                    const maxSales = Math.max(...rows.map(r => safeNum(r.salesAmount)), 1);
+                    const maxWaste = Math.max(...rows.map(r => safeNum(r.wasteAmount)), 1);
 
-                        '<rect x="' + pctX + '" y="' + (y - 13) + '" width="84" height="26" rx="13" fill="' + pctBg + '"/>',
-                        '<text x="' + (pctX + 42) + '" y="' + y + '" font-size="11" font-weight="800" fill="' + pctColor + '" text-anchor="middle" dominant-baseline="middle">' + pct.toFixed(2) + '%</text>',
-                        '<line x1="36" y1="' + (y + 22) + '" x2="' + (width - 36) + '" y2="' + (y + 22) + '" stroke="' + colors.border + '" stroke-width="0.5"/>'
-                    );
-                });
+                    const salesData = rows.map(row => ({
+                        value: (safeNum(row.salesAmount) / maxSales) * 100,
+                        row
+                    }));
 
-                parts.push(
-                    '<text x="' + (width - 40) + '" y="' + (height - 14) + '" font-size="10" font-weight="600" fill="' + colors.muted + '" text-anchor="end">' + rows.length + ' FPs</text>',
-                    '</svg>'
-                );
+                    const wasteData = rows.map(row => ({
+                        value: (safeNum(row.wasteAmount) / maxWaste) * 100,
+                        row
+                    }));
 
-                const svg = parts.join('');
-                const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-                const svgUrl = URL.createObjectURL(svgBlob);
-                const img = new Image();
+                    exportChart.setOption({
+                        animation: false,
+                        backgroundColor: colors.card,
+                        title: {
+                            text: 'FP Sales • Waste • %',
+                            subtext: 'All FPs · ranked by Waste % Sales',
+                            left: 36,
+                            top: 18,
+                            textStyle: {
+                                color: colors.fg,
+                                fontFamily: 'Plus Jakarta Sans, Inter, Arial, sans-serif',
+                                fontSize: 24,
+                                fontWeight: 800
+                            },
+                            subtextStyle: {
+                                color: colors.muted,
+                                fontFamily: 'Plus Jakarta Sans, Inter, Arial, sans-serif',
+                                fontSize: 13,
+                                fontWeight: 600
+                            }
+                        },
+                        legend: {
+                            data: ['Sales Amount', 'Waste Amount'],
+                            top: 28,
+                            right: 36,
+                            textStyle: {
+                                color: colors.muted,
+                                fontFamily: 'Plus Jakarta Sans, Inter, Arial, sans-serif',
+                                fontSize: 12
+                            },
+                            icon: 'roundRect'
+                        },
+                        grid: {
+                            left: 270,
+                            right: 340,
+                            top: 112,
+                            bottom: 28,
+                            containLabel: false
+                        },
+                        xAxis: {
+                            type: 'value',
+                            min: 0,
+                            max: 125,
+                            show: false
+                        },
+                        yAxis: {
+                            type: 'category',
+                            inverse: true,
+                            data: rows.map((row, index) => (index + 1) + '. ' + truncate(row.fp, 32)),
+                            axisLine: { show: false },
+                            axisTick: { show: false },
+                            axisLabel: {
+                                color: colors.fg,
+                                fontFamily: 'Plus Jakarta Sans, Inter, Arial, sans-serif',
+                                fontSize: 11,
+                                fontWeight: 700,
+                                width: 230,
+                                overflow: 'truncate',
+                                margin: 16
+                            }
+                        },
+                        series: [
+                            {
+                                name: 'Sales Amount',
+                                type: 'bar',
+                                data: salesData,
+                                barMaxWidth: 13,
+                                barGap: '30%',
+                                itemStyle: {
+                                    color: colors.accent1,
+                                    borderRadius: [0, 6, 6, 0],
+                                    opacity: 0.85
+                                },
+                                label: {
+                                    show: true,
+                                    position: 'right',
+                                    distance: 8,
+                                    formatter: (params) => {
+                                        const row = params.data.row;
+                                        return row.salesAmount.toLocaleString() + ' EGP';
+                                    },
+                                    color: colors.fg,
+                                    fontFamily: 'Plus Jakarta Sans, Inter, Arial, sans-serif',
+                                    fontSize: 10,
+                                    fontWeight: 700
+                                }
+                            },
+                            {
+                                name: 'Waste Amount',
+                                type: 'bar',
+                                data: wasteData,
+                                barMaxWidth: 9,
+                                itemStyle: {
+                                    color: colors.accent2,
+                                    borderRadius: [0, 6, 6, 0]
+                                },
+                                label: {
+                                    show: true,
+                                    position: 'right',
+                                    distance: 8,
+                                    formatter: (params) => {
+                                        const row = params.data.row;
+                                        return row.wasteAmount.toLocaleString() + ' EGP  ·  ' + row.wastePct.toFixed(2) + '%';
+                                    },
+                                    color: colors.accent2,
+                                    fontFamily: 'Plus Jakarta Sans, Inter, Arial, sans-serif',
+                                    fontSize: 10,
+                                    fontWeight: 800
+                                }
+                            }
+                        ]
+                    });
 
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    const scale = 2;
-                    canvas.width = width * scale;
-                    canvas.height = height * scale;
+                    exportChart.resize();
 
-                    const ctx = canvas.getContext('2d');
-                    if (!ctx) {
-                        URL.revokeObjectURL(svgUrl);
-                        return;
-                    }
+                    const url = exportChart.getDataURL({
+                        type: 'png',
+                        pixelRatio: 2,
+                        backgroundColor: colors.card
+                    });
 
-                    ctx.scale(scale, scale);
-                    ctx.drawImage(img, 0, 0, width, height);
-                    URL.revokeObjectURL(svgUrl);
-
-                    canvas.toBlob((pngBlob) => {
-                        if (!pngBlob) return;
-                        const pngUrl = URL.createObjectURL(pngBlob);
-                        const link = document.createElement('a');
-                        link.download = 'FP_Sales_Waste_Comparison.png';
-                        link.href = pngUrl;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                        setTimeout(() => URL.revokeObjectURL(pngUrl), 1000);
-                    }, 'image/png');
-                };
-
-                img.onerror = () => {
-                    URL.revokeObjectURL(svgUrl);
-                };
-
-                img.src = svgUrl;
+                    const link = document.createElement('a');
+                    link.download = 'FP_Sales_Waste_Comparison.png';
+                    link.href = url;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                } finally {
+                    if (exportChart) exportChart.dispose();
+                    temp.remove();
+                }
             }
 
             dlSalesBtn.addEventListener('click', downloadSalesComparisonImage);
