@@ -1481,9 +1481,17 @@
                 instSales = echarts.init(chartSales);
 
                 const labelFont = 10;
-                const salesLabel = 'Sales';
-                const wasteLabel = 'Waste';
-                const pctLabel = 'Waste %';
+                const salesMax = maxSales;
+                const wasteMax = maxWaste;
+
+                const rowData = sorted.map((row, index) => ({
+                    value: [
+                        index,
+                        (safeNum(row.salesAmount) / salesMax) * 31,
+                        (safeNum(row.wasteAmount) / wasteMax) * 31
+                    ],
+                    row
+                }));
 
                 instSales.setOption({
                     animation: false,
@@ -1535,7 +1543,7 @@
                             left: '25%',
                             top: 14,
                             style: {
-                                text: salesLabel,
+                                text: 'Sales',
                                 fill: colors.fg,
                                 font: '700 11px Plus Jakarta Sans, Inter, sans-serif'
                             }
@@ -1545,7 +1553,7 @@
                             left: '57%',
                             top: 14,
                             style: {
-                                text: wasteLabel,
+                                text: 'Waste',
                                 fill: colors.fg,
                                 font: '700 11px Plus Jakarta Sans, Inter, sans-serif'
                             }
@@ -1555,7 +1563,7 @@
                             right: '1%',
                             top: 14,
                             style: {
-                                text: pctLabel,
+                                text: 'Waste %',
                                 fill: colors.fg,
                                 font: '700 11px Plus Jakarta Sans, Inter, sans-serif'
                             }
@@ -1564,32 +1572,44 @@
                     series: [{
                         type: 'custom',
                         coordinateSystem: 'cartesian2d',
-                        data: sorted.map((row, index) => ({
-                            value: [
-                                index,
-                                (safeNum(row.salesAmount) / maxSales) * 31,
-                                (safeNum(row.wasteAmount) / maxWaste) * 31,
-                                safeNum(row.wastePct)
-                            ],
-                            row
-                        })),
+                        data: rowData,
                         renderItem: (params, api) => {
-                            const row = params.data.row;
+                            const row = rowData[params.dataIndex]?.row;
+                            if (!row) return null;
+
                             const y = api.coord([0, params.dataIndex])[1];
                             const x0 = api.coord([0, params.dataIndex])[0];
-                            const salesX = api.coord([31, params.dataIndex])[0];
+                            const salesEnd = api.coord([31, params.dataIndex])[0];
                             const wasteStart = api.coord([37, params.dataIndex])[0];
-                            const wasteX = api.coord([37 + (safeNum(row.wasteAmount) / maxWaste) * 31, params.dataIndex])[0];
+                            const wasteEnd = api.coord([
+                                37 + (safeNum(row.wasteAmount) / wasteMax) * 31,
+                                params.dataIndex
+                            ])[0];
                             const pctX = api.coord([91, params.dataIndex])[0];
                             const barH = Math.min(12, rowHeight * 0.32);
-                            const bgW = salesX - x0;
+                            const salesTrackWidth = salesEnd - x0;
+                            const salesBarWidth = Math.max(
+                                2,
+                                (safeNum(row.salesAmount) / salesMax) * salesTrackWidth
+                            );
+                            const wasteTrackWidth = salesTrackWidth;
+                            const wasteBarWidth = Math.max(
+                                2,
+                                (safeNum(row.wasteAmount) / wasteMax) * wasteTrackWidth
+                            );
 
                             return {
                                 type: 'group',
                                 children: [
                                     {
                                         type: 'rect',
-                                        shape: { x: x0, y: y - barH / 2, width: bgW, height: barH, r: 5 },
+                                        shape: {
+                                            x: x0,
+                                            y: y - barH / 2,
+                                            width: salesTrackWidth,
+                                            height: barH,
+                                            r: 5
+                                        },
                                         style: { fill: colors.border }
                                     },
                                     {
@@ -1597,7 +1617,7 @@
                                         shape: {
                                             x: x0,
                                             y: y - barH / 2,
-                                            width: Math.max(2, (safeNum(row.salesAmount) / maxSales) * bgW),
+                                            width: salesBarWidth,
                                             height: barH,
                                             r: 5
                                         },
@@ -1606,8 +1626,8 @@
                                     {
                                         type: 'text',
                                         style: {
-                                            x: salesX + 6,
-                                            y: y,
+                                            x: salesEnd + 6,
+                                            y,
                                             text: fmtCurrency(row.salesAmount),
                                             textVerticalAlign: 'middle',
                                             fill: colors.fg,
@@ -1616,7 +1636,13 @@
                                     },
                                     {
                                         type: 'rect',
-                                        shape: { x: wasteStart, y: y - barH / 2, width: salesX - x0, height: barH, r: 5 },
+                                        shape: {
+                                            x: wasteStart,
+                                            y: y - barH / 2,
+                                            width: wasteTrackWidth,
+                                            height: barH,
+                                            r: 5
+                                        },
                                         style: { fill: colors.border }
                                     },
                                     {
@@ -1624,7 +1650,7 @@
                                         shape: {
                                             x: wasteStart,
                                             y: y - barH / 2,
-                                            width: Math.max(2, (safeNum(row.wasteAmount) / maxWaste) * (salesX - x0)),
+                                            width: wasteBarWidth,
                                             height: barH,
                                             r: 5
                                         },
@@ -1633,10 +1659,9 @@
                                     {
                                         type: 'text',
                                         style: {
-                                            x: pctX - 8,
-                                            y: y,
+                                            x: wasteStart + wasteTrackWidth + 6,
+                                            y,
                                             text: fmtCurrency(row.wasteAmount),
-                                            textAlign: 'right',
                                             textVerticalAlign: 'middle',
                                             fill: colors.accent2,
                                             font: '700 ' + labelFont + 'px Plus Jakarta Sans, Inter, sans-serif'
@@ -1645,8 +1670,8 @@
                                     {
                                         type: 'text',
                                         style: {
-                                            x: pctX + 2,
-                                            y: y,
+                                            x: pctX,
+                                            y,
                                             text: row.wastePct.toFixed(2) + '%',
                                             textVerticalAlign: 'middle',
                                             fill: row.wastePct > 1 ? '#e11d48' : colors.fg,
@@ -1656,11 +1681,9 @@
                                 ]
                             };
                         },
-                        encode: { x: 1, y: 0 },
                         silent: true
                     }]
-                });
-                instSales.resize();
+                });                instSales.resize();
             }
 
             function renderCharts(agg, trendAgg, salesRows = []) {
