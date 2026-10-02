@@ -1480,26 +1480,26 @@
                 }
                 instSales = echarts.init(chartSales);
 
-                const labelFont = 10;
-                const salesMax = maxSales;
-                const wasteMax = maxWaste;
+                const salesMax = Math.max(maxSales, 1);
+                const wasteMax = Math.max(maxWaste, 1);
+                const visibleEnd = names.length > 18 ? Math.min(100, (18 / names.length) * 100) : 100;
 
-                const rowData = sorted.map((row, index) => ({
-                    value: [
-                        index,
-                        (safeNum(row.salesAmount) / salesMax) * 31,
-                        (safeNum(row.wasteAmount) / wasteMax) * 31
-                    ],
-                    row
-                }));
+                // Normalize each metric independently so both Sales and Waste remain visible.
+                const normalizedSales = sorted.map(row => (safeNum(row.salesAmount) / salesMax) * 100);
+                const normalizedWaste = sorted.map(row => (safeNum(row.wasteAmount) / wasteMax) * 100);
+
+                // Standard ECharts bars are used here for stability and predictable rendering.
+                if (!instSales) instSales = echarts.init(chartSales);
 
                 instSales.setOption({
                     animation: false,
                     tooltip: {
                         ...tooltip,
-                        trigger: 'item',
+                        trigger: 'axis',
+                        axisPointer: { type: 'shadow' },
                         formatter: (params) => {
-                            const row = params.data?.row;
+                            const idx = params[0]?.dataIndex ?? 0;
+                            const row = sorted[idx];
                             if (!row) return '';
                             return [
                                 '<strong>' + row.fp + '</strong>',
@@ -1509,11 +1509,17 @@
                             ].join('<br/>');
                         }
                     },
+                    legend: {
+                        data: ['Sales Amount', 'Waste Amount'],
+                        textStyle,
+                        top: 0,
+                        icon: 'roundRect'
+                    },
                     grid: {
-                        left: '25%',
+                        left: '26%',
                         right: '2%',
-                        top: 58,
-                        bottom: 20,
+                        top: 42,
+                        bottom: names.length > 18 ? 46 : 20,
                         containLabel: true
                     },
                     xAxis: {
@@ -1537,153 +1543,82 @@
                             padding: [0, 10, 0, 0]
                         }
                     },
-                    graphic: [
+                    dataZoom: names.length > 18 ? [
                         {
-                            type: 'text',
-                            left: '25%',
-                            top: 14,
-                            style: {
-                                text: 'Sales',
-                                fill: colors.fg,
-                                font: '700 11px Plus Jakarta Sans, Inter, sans-serif'
+                            type: 'slider',
+                            yAxisIndex: 0,
+                            right: 6,
+                            top: 42,
+                            bottom: 46,
+                            width: 12,
+                            start: 0,
+                            end: visibleEnd,
+                            handleSize: '75%',
+                            borderColor: colors.border,
+                            fillerColor: colors.accent1 + '20',
+                            backgroundColor: colors.card
+                        },
+                        {
+                            type: 'inside',
+                            yAxisIndex: 0,
+                            start: 0,
+                            end: visibleEnd
+                        }
+                    ] : [],
+                    series: [
+                        {
+                            name: 'Sales Amount',
+                            type: 'bar',
+                            data: sorted.map((row, i) => ({
+                                value: normalizedSales[i],
+                                row
+                            })),
+                            barMaxWidth: 12,
+                            barGap: '25%',
+                            itemStyle: {
+                                color: colors.accent1,
+                                borderRadius: [0, 5, 5, 0],
+                                opacity: 0.82
+                            },
+                            label: {
+                                show: true,
+                                position: 'right',
+                                distance: 5,
+                                formatter: (params) => fmtCurrency(params.data.row.salesAmount),
+                                color: colors.fg,
+                                fontSize: 9,
+                                fontWeight: 700
                             }
                         },
                         {
-                            type: 'text',
-                            left: '57%',
-                            top: 14,
-                            style: {
-                                text: 'Waste',
-                                fill: colors.fg,
-                                font: '700 11px Plus Jakarta Sans, Inter, sans-serif'
-                            }
-                        },
-                        {
-                            type: 'text',
-                            right: '1%',
-                            top: 14,
-                            style: {
-                                text: 'Waste %',
-                                fill: colors.fg,
-                                font: '700 11px Plus Jakarta Sans, Inter, sans-serif'
+                            name: 'Waste Amount',
+                            type: 'bar',
+                            data: sorted.map((row, i) => ({
+                                value: normalizedWaste[i],
+                                row
+                            })),
+                            barMaxWidth: 8,
+                            itemStyle: {
+                                color: colors.accent2,
+                                borderRadius: [0, 5, 5, 0],
+                                opacity: 0.95
+                            },
+                            label: {
+                                show: true,
+                                position: 'right',
+                                distance: 5,
+                                formatter: (params) => {
+                                    const row = params.data.row;
+                                    return fmtCurrency(row.wasteAmount) + '  ·  ' + row.wastePct.toFixed(2) + '%';
+                                },
+                                color: colors.accent2,
+                                fontSize: 9,
+                                fontWeight: 800
                             }
                         }
-                    ],
-                    series: [{
-                        type: 'custom',
-                        coordinateSystem: 'cartesian2d',
-                        data: rowData,
-                        renderItem: (params, api) => {
-                            const row = rowData[params.dataIndex]?.row;
-                            if (!row) return null;
-
-                            const y = api.coord([0, params.dataIndex])[1];
-                            const x0 = api.coord([0, params.dataIndex])[0];
-                            const salesEnd = api.coord([31, params.dataIndex])[0];
-                            const wasteStart = api.coord([37, params.dataIndex])[0];
-                            const wasteEnd = api.coord([
-                                37 + (safeNum(row.wasteAmount) / wasteMax) * 31,
-                                params.dataIndex
-                            ])[0];
-                            const pctX = api.coord([91, params.dataIndex])[0];
-                            const barH = Math.min(12, rowHeight * 0.32);
-                            const salesTrackWidth = salesEnd - x0;
-                            const salesBarWidth = Math.max(
-                                2,
-                                (safeNum(row.salesAmount) / salesMax) * salesTrackWidth
-                            );
-                            const wasteTrackWidth = salesTrackWidth;
-                            const wasteBarWidth = Math.max(
-                                2,
-                                (safeNum(row.wasteAmount) / wasteMax) * wasteTrackWidth
-                            );
-
-                            return {
-                                type: 'group',
-                                children: [
-                                    {
-                                        type: 'rect',
-                                        shape: {
-                                            x: x0,
-                                            y: y - barH / 2,
-                                            width: salesTrackWidth,
-                                            height: barH,
-                                            r: 5
-                                        },
-                                        style: { fill: colors.border }
-                                    },
-                                    {
-                                        type: 'rect',
-                                        shape: {
-                                            x: x0,
-                                            y: y - barH / 2,
-                                            width: salesBarWidth,
-                                            height: barH,
-                                            r: 5
-                                        },
-                                        style: { fill: colors.accent1, opacity: 0.82 }
-                                    },
-                                    {
-                                        type: 'text',
-                                        style: {
-                                            x: salesEnd + 6,
-                                            y,
-                                            text: fmtCurrency(row.salesAmount),
-                                            textVerticalAlign: 'middle',
-                                            fill: colors.fg,
-                                            font: '700 ' + labelFont + 'px Plus Jakarta Sans, Inter, sans-serif'
-                                        }
-                                    },
-                                    {
-                                        type: 'rect',
-                                        shape: {
-                                            x: wasteStart,
-                                            y: y - barH / 2,
-                                            width: wasteTrackWidth,
-                                            height: barH,
-                                            r: 5
-                                        },
-                                        style: { fill: colors.border }
-                                    },
-                                    {
-                                        type: 'rect',
-                                        shape: {
-                                            x: wasteStart,
-                                            y: y - barH / 2,
-                                            width: wasteBarWidth,
-                                            height: barH,
-                                            r: 5
-                                        },
-                                        style: { fill: colors.accent2, opacity: 0.95 }
-                                    },
-                                    {
-                                        type: 'text',
-                                        style: {
-                                            x: wasteStart + wasteTrackWidth + 6,
-                                            y,
-                                            text: fmtCurrency(row.wasteAmount),
-                                            textVerticalAlign: 'middle',
-                                            fill: colors.accent2,
-                                            font: '700 ' + labelFont + 'px Plus Jakarta Sans, Inter, sans-serif'
-                                        }
-                                    },
-                                    {
-                                        type: 'text',
-                                        style: {
-                                            x: pctX,
-                                            y,
-                                            text: row.wastePct.toFixed(2) + '%',
-                                            textVerticalAlign: 'middle',
-                                            fill: row.wastePct > 1 ? '#e11d48' : colors.fg,
-                                            font: '800 ' + (labelFont + 1) + 'px Plus Jakarta Sans, Inter, sans-serif'
-                                        }
-                                    }
-                                ]
-                            };
-                        },
-                        silent: true
-                    }]
-                });                instSales.resize();
+                    ]
+                });
+                instSales.resize();
             }
 
             function renderCharts(agg, trendAgg, salesRows = []) {
