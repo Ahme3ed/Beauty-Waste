@@ -790,7 +790,7 @@
 
             <div class="chart-card lg:col-span-2">
                 <div class="flex items-center justify-between mb-3">
-                    <h3 class="text-sm font-semibold" style="color:var(--fg)">Sales vs Waste — Latest Month</h3>
+                    <h3 class="text-sm font-semibold" style="color:var(--fg)">Sales vs Waste — FP Landscape</h3>
                     <div class="flex items-center gap-1">
                         <button class="shad-btn shad-btn-outline shad-btn-xs" id="dlSalesBtn" title="Download Image">Image</button>
                     </div>
@@ -1461,20 +1461,32 @@
                     extraCssText: 'box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08); border-radius: 8px;'
                 };
 
-                const sorted = rows.slice().sort((a, b) => b.wastePct - a.wastePct);
-                const names = sorted.map(r => truncate(r.fp, 18));
-                const sales = sorted.map(r => r.salesAmount);
-                const waste = sorted.map(r => r.wasteAmount);
+                // All branches stay visible. The largest bubbles and labels identify the
+                // highest-waste FPs without forcing dozens of branch names onto the axis.
+                const sortedByWaste = rows.slice().sort((a, b) => b.wasteAmount - a.wasteAmount);
+                const topLabels = new Set(sortedByWaste.slice(0, 8).map(r => r.fp));
+                const maxWaste = Math.max(...rows.map(r => safeNum(r.wasteAmount)), 1);
+                const avgWastePct = rows.reduce((sum, r) => sum + safeNum(r.wastePct), 0) / rows.length;
+
+                const points = rows.map(row => ({
+                    name: row.fp,
+                    value: [
+                        safeNum(row.salesAmount),
+                        safeNum(row.wastePct),
+                        safeNum(row.wasteAmount),
+                        safeNum(row.qtySold),
+                        safeNum(row.wasteQty)
+                    ],
+                    row
+                }));
 
                 if (!instSales) instSales = echarts.init(chartSales);
                 instSales.setOption({
                     tooltip: {
                         ...tooltip,
-                        trigger: 'axis',
-                        axisPointer: { type: 'shadow' },
+                        trigger: 'item',
                         formatter: (params) => {
-                            const idx = params[0]?.dataIndex ?? 0;
-                            const row = sorted[idx];
+                            const row = params.data?.row;
                             if (!row) return '';
                             return [
                                 '<strong>' + row.fp + '</strong>',
@@ -1486,54 +1498,65 @@
                             ].join('<br/>');
                         }
                     },
-                    legend: { data: ['Sales Amount', 'Waste Amount'], textStyle, bottom: 0, icon: 'circle' },
-                    grid: { left: '3%', right: '4%', top: '6%', bottom: names.length > 18 ? '24%' : '14%', containLabel: true },
+                    grid: { left: '7%', right: '5%', top: '8%', bottom: '14%', containLabel: true },
                     xAxis: {
-                        type: 'category',
-                        data: names,
-                        axisLabel: { ...textStyle, rotate: names.length > 12 ? 35 : 0, interval: 0, fontSize: 10 }
+                        type: 'value',
+                        name: 'Sales Amount',
+                        nameTextStyle: textStyle,
+                        axisLabel: { ...textStyle, formatter: fmtCurrency },
+                        splitLine: { lineStyle: { color: colors.border, type: 'dashed' } }
                     },
-                    yAxis: [
-                        {
-                            type: 'value',
-                            name: 'Sales',
-                            nameTextStyle: textStyle,
-                            axisLabel: { ...textStyle, formatter: fmtCurrency },
-                            splitLine: { lineStyle: { color: colors.border, type: 'dashed' } }
+                    yAxis: {
+                        type: 'value',
+                        name: 'Waste % of Sales',
+                        nameTextStyle: textStyle,
+                        axisLabel: { ...textStyle, formatter: (v) => v.toFixed(1) + '%' },
+                        splitLine: { lineStyle: { color: colors.border, type: 'dashed' } }
+                    },
+                    series: [{
+                        name: 'FPs',
+                        type: 'scatter',
+                        data: points,
+                        symbolSize: (value) => {
+                            const waste = safeNum(value[2]);
+                            return 10 + Math.sqrt(waste / maxWaste) * 28;
                         },
-                        {
-                            type: 'value',
-                            name: 'Waste',
-                            nameTextStyle: textStyle,
-                            axisLabel: { ...textStyle, formatter: fmtCurrency },
-                            splitLine: { show: false }
-                        }
-                    ],
-                    dataZoom: names.length > 18 ? [
-                        { type: 'inside', start: 0, end: 100 },
-                        { type: 'slider', bottom: 26, height: 16 }
-                    ] : [],
-                    series: [
-                        {
-                            name: 'Sales Amount',
-                            type: 'bar',
-                            yAxisIndex: 0,
-                            data: sales,
-                            barMaxWidth: 22,
-                            itemStyle: { color: colors.accent1, borderRadius: [5, 5, 0, 0] }
+                        itemStyle: {
+                            color: colors.accent1,
+                            opacity: 0.72
                         },
-                        {
-                            name: 'Waste Amount',
-                            type: 'line',
-                            yAxisIndex: 1,
-                            data: waste,
-                            smooth: 0.25,
-                            symbol: 'circle',
-                            symbolSize: 6,
-                            lineStyle: { color: colors.accent2, width: 2.5 },
-                            itemStyle: { color: colors.accent2 }
+                        emphasis: {
+                            focus: 'self',
+                            scale: true,
+                            itemStyle: {
+                                opacity: 1
+                            }
+                        },
+                        label: {
+                            show: true,
+                            formatter: (params) => topLabels.has(params.data.name) ? truncate(params.data.name, 20) : '',
+                            position: 'top',
+                            color: colors.fg,
+                            fontSize: 10,
+                            fontWeight: 700
+                        },
+                        labelLayout: {
+                            hideOverlap: true
+                        },
+                        markLine: {
+                            silent: true,
+                            symbol: 'none',
+                            label: {
+                                formatter: 'Average Waste %'
+                            },
+                            lineStyle: {
+                                type: 'dashed',
+                                color: colors.accent2,
+                                width: 1.5
+                            },
+                            data: [{ yAxis: avgWastePct }]
                         }
-                    ]
+                    }]
                 });
                 instSales.resize();
             }
