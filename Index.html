@@ -15,9 +15,6 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js">
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js">
-    </script>
-
     <!-- Tailwind CSS via CDN -->
     <script src="https://cdn.tailwindcss.com">
     </script>
@@ -1502,36 +1499,167 @@
             dlFPBtn.addEventListener('click', () => downloadChartImage(instFP, 'Top_Fulfillment_Hubs'));
             dlReasonBtn.addEventListener('click', () => downloadChartImage(instReason, 'Deduction_Reason_Radar'));
             // Sales vs Waste is rendered as a native comparison matrix.
-            async function downloadSalesComparisonImage() {
-                if (!window.html2canvas || !chartSales || !salesData || salesData.length === 0) return;
+            function downloadSalesComparisonImage() {
+                const rows = getFilteredSalesData().slice().sort((a, b) => {
+                    const pctDiff = safeNum(b.wastePct) - safeNum(a.wastePct);
+                    return pctDiff !== 0 ? pctDiff : safeNum(b.wasteAmount) - safeNum(a.wasteAmount);
+                });
 
-                const originalMaxHeight = chartSales.style.maxHeight;
-                const originalOverflowY = chartSales.style.overflowY;
-                const originalPaddingRight = chartSales.style.paddingRight;
+                if (!rows.length) return;
 
-                try {
-                    chartSales.style.maxHeight = 'none';
-                    chartSales.style.overflowY = 'visible';
-                    chartSales.style.paddingRight = '0';
+                const colors = getThemeColors();
+                const canvas = document.createElement('canvas');
+                const dpr = 2;
+                const width = 1800;
+                const rowHeight = 42;
+                const headerHeight = 116;
+                const footerHeight = 28;
+                const height = headerHeight + rows.length * rowHeight + footerHeight;
 
-                    const canvas = await html2canvas(chartSales, {
-                        backgroundColor: getThemeColors().card,
-                        scale: 2,
-                        useCORS: true,
-                        logging: false
-                    });
+                canvas.width = width * dpr;
+                canvas.height = height * dpr;
 
-                    const link = document.createElement('a');
-                    link.download = 'FP_Sales_Waste_Comparison.png';
-                    link.href = canvas.toDataURL('image/png');
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                } finally {
-                    chartSales.style.maxHeight = originalMaxHeight;
-                    chartSales.style.overflowY = originalOverflowY;
-                    chartSales.style.paddingRight = originalPaddingRight;
-                }
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return;
+                ctx.scale(dpr, dpr);
+
+                const drawRoundRect = (x, y, w, h, r, fill) => {
+                    ctx.beginPath();
+                    ctx.moveTo(x + r, y);
+                    ctx.arcTo(x + w, y, x + w, y + h, r);
+                    ctx.arcTo(x + w, y + h, x, y + h, r);
+                    ctx.arcTo(x, y + h, x, y, r);
+                    ctx.arcTo(x, y, x + w, y, r);
+                    ctx.closePath();
+                    ctx.fillStyle = fill;
+                    ctx.fill();
+                };
+
+                const text = (value, x, y, size, weight, color, align = 'left') => {
+                    ctx.font = weight + ' ' + size + 'px "Plus Jakarta Sans", Inter, Arial, sans-serif';
+                    ctx.fillStyle = color;
+                    ctx.textAlign = align;
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(String(value), x, y);
+                };
+
+                const truncateCanvasText = (value, maxWidth, fontSize, weight = 600) => {
+                    const str = String(value || '');
+                    ctx.font = weight + ' ' + fontSize + 'px "Plus Jakarta Sans", Inter, Arial, sans-serif';
+                    if (ctx.measureText(str).width <= maxWidth) return str;
+                    let out = str;
+                    while (out.length > 3 && ctx.measureText(out + '…').width > maxWidth) {
+                        out = out.slice(0, -1);
+                    }
+                    return out + '…';
+                };
+
+                ctx.fillStyle = colors.card;
+                ctx.fillRect(0, 0, width, height);
+
+                text('FP Sales • Waste • %', 40, 38, 24, 800, colors.fg);
+                text('All FPs · ranked by Waste % Sales', 40, 70, 13, 600, colors.muted);
+
+                const columns = {
+                    fp: 40,
+                    salesBar: 390,
+                    salesValue: 745,
+                    wasteBar: 880,
+                    wasteValue: 1235,
+                    pct: 1395
+                };
+                const salesBarWidth = 320;
+                const wasteBarWidth = 320;
+                const maxSales = Math.max(...rows.map(r => safeNum(r.salesAmount)), 1);
+                const maxWaste = Math.max(...rows.map(r => safeNum(r.wasteAmount)), 1);
+
+                text('FP', columns.fp, 101, 11, 800, colors.muted);
+                text('Sales', columns.salesBar, 101, 11, 800, colors.muted);
+                text('Sales EGP', columns.salesValue, 101, 11, 800, colors.muted, 'right');
+                text('Waste', columns.wasteBar, 101, 11, 800, colors.muted);
+                text('Waste EGP', columns.wasteValue, 101, 11, 800, colors.muted, 'right');
+                text('Waste %', columns.pct + 55, 101, 11, 800, colors.muted, 'center');
+
+                ctx.strokeStyle = colors.border;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(36, 110);
+                ctx.lineTo(width - 36, 110);
+                ctx.stroke();
+
+                rows.forEach((row, index) => {
+                    const y = headerHeight + index * rowHeight + rowHeight / 2;
+                    const isTop = index < 10;
+                    const sales = safeNum(row.salesAmount);
+                    const waste = safeNum(row.wasteAmount);
+                    const pct = safeNum(row.wastePct);
+
+                    if (isTop) {
+                        drawRoundRect(36, y - 17, width - 72, 34, 8, 'rgba(79,70,229,0.05)');
+                    }
+
+                    text(
+                        (index + 1) + '. ' + truncateCanvasText(row.fp, 320, 11, isTop ? 800 : 600),
+                        columns.fp,
+                        y,
+                        11,
+                        isTop ? 800 : 600,
+                        colors.fg
+                    );
+
+                    drawRoundRect(columns.salesBar, y - 5, salesBarWidth, 10, 5, colors.border);
+                    drawRoundRect(
+                        columns.salesBar,
+                        y - 5,
+                        Math.max(2, (sales / maxSales) * salesBarWidth),
+                        10,
+                        5,
+                        colors.accent1
+                    );
+                    text(fmtCurrency(sales), columns.salesValue, y, 11, 700, colors.fg, 'right');
+
+                    drawRoundRect(columns.wasteBar, y - 5, wasteBarWidth, 10, 5, colors.border);
+                    drawRoundRect(
+                        columns.wasteBar,
+                        y - 5,
+                        Math.max(2, (waste / maxWaste) * wasteBarWidth),
+                        10,
+                        5,
+                        colors.accent2
+                    );
+                    text(fmtCurrency(waste), columns.wasteValue, y, 11, 800, colors.accent2, 'right');
+
+                    const pctBg = pct > 1 ? 'rgba(225,29,72,0.10)' : 'rgba(5,150,105,0.10)';
+                    const pctColor = pct > 1 ? '#e11d48' : '#059669';
+                    drawRoundRect(columns.pct, y - 12, 110, 24, 12, pctBg);
+                    text(pct.toFixed(2) + '%', columns.pct + 55, y, 11, 800, pctColor, 'center');
+
+                    if (index < rows.length - 1) {
+                        ctx.strokeStyle = colors.border;
+                        ctx.lineWidth = 0.5;
+                        ctx.beginPath();
+                        ctx.moveTo(36, y + 21);
+                        ctx.lineTo(width - 36, y + 21);
+                        ctx.stroke();
+                    }
+                });
+
+                text(
+                    rows.length + ' FPs',
+                    width - 40,
+                    height - 14,
+                    10,
+                    600,
+                    colors.muted,
+                    'right'
+                );
+
+                const link = document.createElement('a');
+                link.download = 'FP_Sales_Waste_Comparison.png';
+                link.href = canvas.toDataURL('image/png');
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
             }
 
             dlSalesBtn.addEventListener('click', downloadSalesComparisonImage);
