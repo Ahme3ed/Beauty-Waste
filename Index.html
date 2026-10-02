@@ -1122,10 +1122,13 @@
                     .map(row => {
                         const salesAmount = safeNum(row[best.colSalesAmount]);
                         const wasteAmount = safeNum(row[best.colWasteAmount]);
-                        let wastePct = safeNum(row[best.colWastePct]);
+                        const rawWastePct = row[best.colWastePct];
+                        let wastePct = safeNum(rawWastePct);
+                        const percentCell = String(rawWastePct ?? '').includes('%');
 
-                        // If the workbook stores 0.0222 instead of 2.22%, convert it.
-                        if (wastePct > 0 && wastePct < 1) wastePct *= 100;
+                        // Excel may return a percentage cell as 0.0222, while a text
+                        // cell may return "2.22%". Only decimal numeric percentages need *100.
+                        if (!percentCell && wastePct > 0 && wastePct < 1) wastePct *= 100;
                         if (!wastePct && salesAmount > 0) {
                             wastePct = (wasteAmount / salesAmount) * 100;
                         }
