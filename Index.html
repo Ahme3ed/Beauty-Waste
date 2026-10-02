@@ -695,7 +695,7 @@
                     <line x1="12" y1="16" x2="12" y2="12" />
                     <line x1="12" y1="8" x2="12.01" y2="8" />
                 </svg>
-                <span>Filters entries with Validation = "Real Waste"</span>
+                <span>Filters entries with Validation = "Real Waste" · optional <strong>Sales</strong> sheet adds Sales vs Waste analysis</span>
             </div>
         </div>
 
@@ -1445,7 +1445,7 @@
 
             // ─── Render Charts ───
             function renderSalesChart(rows) {
-                if (!salesData || salesData.length === 0) {
+                if (!salesData || salesData.length === 0 || !rows || rows.length === 0) {
                     chartSales.parentElement.classList.add('hidden');
                     return;
                 }
