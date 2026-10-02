@@ -8,7 +8,7 @@
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet" />
 
     <!-- SheetJS & ECharts -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js">
@@ -611,6 +611,328 @@
                 max-height: 150px;
             }
         }
+        /* ─── Example.html visual system ─── */
+        :root {
+            --bg: #FFFFFF;
+            --card: #FFFFFF;
+            --muted: #8A8A94;
+            --accent-1: #AA0382;
+            --accent-2: #C94AA5;
+            --glass: #FFFFFF;
+            --glass-border: #E6E0E8;
+            --success: #059669;
+            --fg: #2B2B32;
+            --border-light: #F2F0F4;
+        }
+
+        html, body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #FFFFFF;
+            color: #2B2B32;
+        }
+
+        body {
+            padding: 20px 28px 48px;
+        }
+
+        .max-w-7xl {
+            max-width: 1360px;
+        }
+
+        header.shad-card {
+            position: relative;
+            top: auto;
+            padding: 12px 0 18px;
+            margin-bottom: 24px;
+            border: 0;
+            border-bottom: 1px solid #E6E0E8;
+            border-radius: 0;
+            background: transparent;
+            box-shadow: none;
+        }
+
+        .branding { gap: 16px; }
+
+        .header-logo-img {
+            display: block !important;
+            height: 48px;
+            width: auto;
+            max-width: 140px;
+            object-fit: contain;
+            border-radius: 0;
+        }
+
+        .header-logo-svg {
+            display: none !important;
+        }
+
+        .header-title {
+            font-family: 'Inter', sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+            color: #2B2B32;
+            line-height: 1.2;
+        }
+
+        .header-sub {
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            color: #8A8A94;
+            margin-left: 0;
+            font-weight: 400;
+        }
+
+        #themeToggle {
+            display: none !important;
+        }
+
+        .shad-btn {
+            font-family: 'Inter', sans-serif;
+            border-radius: 8px;
+            border-color: #E6E0E8;
+            color: #4F4F5A;
+            box-shadow: none;
+        }
+
+        .shad-btn:hover {
+            background: #F7F0FA;
+            border-color: #AA0382;
+            color: #AA0382;
+        }
+
+        .shad-btn-primary {
+            background: #AA0382;
+            border-color: #AA0382;
+            color: #FFFFFF;
+            box-shadow: none;
+        }
+
+        .shad-btn-primary:hover {
+            background: #860266;
+            border-color: #860266;
+            color: #FFFFFF;
+        }
+
+        .shad-btn-destructive {
+            background: #2B2B32;
+            border-color: #2B2B32;
+        }
+
+        .shad-badge {
+            border-color: #E6E0E8;
+            background: #FFFFFF;
+            color: #4F4F5A;
+            box-shadow: 0 2px 8px rgba(0,0,0,.02);
+        }
+
+        .shad-upload-zone {
+            background: #FFFFFF;
+            border: 1px dashed #E6E0E8;
+            border-radius: 12px;
+            box-shadow: none;
+        }
+
+        .shad-upload-zone:hover {
+            border-color: #AA0382;
+            background: #FCF8FD;
+            transform: none;
+        }
+
+        .shad-upload-icon {
+            background: #F3E3F5;
+            color: #AA0382;
+            box-shadow: none;
+        }
+
+        .shad-upload-title { color: #2B2B32; }
+        .shad-upload-desc,
+        .shad-upload-hint { color: #8A8A94; }
+
+        #filterPanel {
+            background: #FFFFFF;
+            border: 0;
+            border-bottom: 1px solid #E6E0E8;
+            border-radius: 0;
+            box-shadow: none;
+            padding: 0 0 16px;
+        }
+
+        #filterPanel label {
+            font-family: 'Inter', sans-serif;
+            color: #8A8A94 !important;
+            font-size: 10px;
+        }
+
+        .shad-dropdown-trigger {
+            height: 38px;
+            border-radius: 8px;
+            border-color: #E6E0E8;
+            background: #FFFFFF;
+            color: #2B2B32;
+            font-family: 'Inter', sans-serif;
+            box-shadow: none;
+        }
+
+        .shad-dropdown-trigger:hover,
+        .shad-dropdown.open .shad-dropdown-trigger {
+            border-color: #AA0382;
+            box-shadow: 0 0 0 3px rgba(170,3,130,.04);
+        }
+
+        .shad-dropdown-menu {
+            border-color: #E6E0E8;
+            border-radius: 8px;
+            box-shadow: 0 10px 24px rgba(0,0,0,.06);
+        }
+
+        #metricsGrid {
+            gap: 14px;
+            margin: 0 0 22px;
+        }
+
+        .shad-metric {
+            background: #FFFFFF;
+            border: 1px solid #E6E0E8;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,.02);
+            padding: 18px 20px 20px;
+        }
+
+        .shad-metric:hover {
+            transform: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,.04), 0 10px 24px rgba(0,0,0,.03);
+        }
+
+        .shad-metric-title {
+            color: #8A8A94;
+            font-family: 'Inter', sans-serif;
+            font-size: 10px;
+            letter-spacing: .06em;
+        }
+
+        .shad-metric-value {
+            color: #2B2B32;
+            font-family: 'Inter', sans-serif;
+            font-size: 28px;
+            line-height: 1.1;
+            letter-spacing: -.02em;
+        }
+
+        .shad-metric-sub {
+            color: #8A8A94;
+            font-family: 'Inter', sans-serif;
+            font-size: 11px;
+        }
+
+        .shad-metric-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: #F3E3F5;
+            border: 0;
+        }
+
+        #chartsGrid {
+            grid-template-columns: 1.5fr 1fr;
+            gap: 16px;
+            margin: 0;
+        }
+
+        @media (min-width: 1024px) {
+            #chartsGrid { grid-template-columns: 1.5fr 1fr; }
+            .chart-card.lg\:col-span-2 { grid-column: 1 / -1; }
+        }
+
+        .chart-card {
+            padding: 0 0 18px;
+            border: 0;
+            border-bottom: 1px solid #E6E0E8;
+            border-radius: 0;
+            background: transparent;
+            box-shadow: none;
+        }
+
+        .chart-card > div:first-child {
+            margin-bottom: 10px !important;
+        }
+
+        .chart-card h3 {
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            color: #2B2B32 !important;
+            letter-spacing: -.01em;
+        }
+
+        .chart-card .shad-btn-xs {
+            height: 28px;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            color: #8A8A94;
+            background: transparent;
+        }
+
+        #chartTrend,
+        #chartCategory,
+        #chartFP,
+        #chartReason {
+            background: transparent;
+        }
+
+        #tableCard {
+            margin-top: 16px;
+            background: #FFFFFF;
+            border: 1px solid #E6E0E8;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,.02);
+        }
+
+        .shad-table-wrapper {
+            border-color: #E6E0E8;
+            border-radius: 8px;
+            box-shadow: none;
+        }
+
+        .shad-table thead th {
+            color: #8A8A94;
+            border-bottom-color: #E6E0E8;
+            font-family: 'Inter', sans-serif;
+            font-size: 10px;
+        }
+
+        .shad-table td {
+            color: #2B2B32;
+            border-bottom-color: #F2F0F4;
+            font-family: 'Inter', sans-serif;
+            font-size: 12px;
+        }
+
+        .category-tag {
+            background: #F3E3F5;
+            color: #860266;
+        }
+
+        .shad-input {
+            border-color: #E6E0E8;
+            background: #FFFFFF;
+            color: #2B2B32;
+            font-family: 'Inter', sans-serif;
+            border-radius: 8px;
+        }
+
+        .shad-input:focus {
+            border-color: #AA0382;
+            box-shadow: 0 0 0 3px rgba(170,3,130,.04);
+        }
+
+        /* Keep the report light and brand-led even when an old local theme preference exists. */
+        .dark body {
+            background: #FFFFFF;
+            color: #2B2B32;
+        }
+
     </style>
 </head>
 <body>
@@ -936,13 +1258,13 @@
             function getThemeColors() {
                 const isDark = document.documentElement.classList.contains('dark');
                 return {
-                    bg: isDark ? '#0b1220' : '#f6f8fb',
-                    card: isDark ? '#0f1724' : '#ffffff',
-                    fg: isDark ? '#e6eef8' : '#0f172a',
-                    muted: isDark ? '#9aa8bd' : '#64748b',
-                    accent1: isDark ? '#8b5cf6' : '#4f46e5',
-                    accent2: isDark ? '#06b6d4' : '#0891b2',
-                    border: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.04)',
+                    bg: '#FFFFFF',
+                    card: '#FFFFFF',
+                    fg: '#2B2B32',
+                    muted: '#8A8A94',
+                    accent1: '#AA0382',
+                    accent2: '#C94AA5',
+                    border: '#E6E0E8',
                 };
             }
 
@@ -1851,8 +2173,8 @@
                 if (!instCategory) instCategory = echarts.init(chartCategory);
                 const sortedCat = [...agg.catData].sort((a, b) => b[1] - a[1]);
                 const pieData = sortedCat.map(([name, value]) => ({ name, value }));
-                const colorPalette = ['#4f46e5', '#7c3aed', '#0891b2', '#059669', '#d97706', '#e11d48', '#8b5cf6', '#06b6d4',
-                    '#10b981', '#f59e0b'
+                const colorPalette = ['#AA0382', '#C94AA5', '#860266', '#D97BBF', '#F0B7DD', '#6E6E78', '#B72E95', '#E6A1CD',
+                    '#8F8F98', '#D45BAF'
                 ];
                 instCategory.setOption({
                     tooltip: {
@@ -1940,8 +2262,8 @@
                             color: colors.fg, fontWeight: '600', fontSize: 10 },
                         itemStyle: {
                             color: new echarts.graphic.LinearGradient(1, 0, 0, 0, [
-                                { offset: 0, color: '#059669' },
-                                { offset: 1, color: '#0891b2' }
+                                { offset: 0, color: '#860266' },
+                                { offset: 1, color: '#AA0382' }
                             ]),
                             borderRadius: [0, 10, 10, 0]
                         }
@@ -2343,7 +2665,7 @@
                 if (rawData && rawData.length > 0) {
                     const agg = processAggregations(currentFilteredData);
                     const trendAgg = processAggregations(rawData);
-                    renderCharts(agg, trendAgg, filteredSales);
+                    renderCharts(agg, trendAgg, getFilteredSalesData());
                 }
                 setTimeout(() => {
                     if (instTrend) instTrend.resize();
@@ -2353,11 +2675,8 @@
                 }, 100);
             }
 
-            // Init theme: default dark
-            const isDark = localStorage.getItem('fp_dark') !== '0';
-            setDarkMode(isDark);
-            themeToggle.addEventListener('click', () => setDarkMode(!document.documentElement.classList.contains(
-            'dark')));
+            // Example.html uses a light, brand-led identity. Keep the report light.
+            setDarkMode(false);
 
         })();
     </script>
