@@ -790,9 +790,9 @@
 
             <div class="chart-card lg:col-span-2">
                 <div class="flex items-center justify-between mb-3">
-                    <h3 class="text-sm font-semibold" style="color:var(--fg)">FP Sales vs Waste</h3>
+                    <h3 class="text-sm font-semibold" style="color:var(--fg)">FP Sales • Waste • %</h3>
                     <div class="flex items-center gap-2">
-                        <span class="text-[10px] font-medium px-2 py-0.5 rounded-full border" style="color:var(--muted);border-color:var(--glass-border)">Top 10 by Waste · Scroll for all FPs</span>
+                        <span class="text-[10px] font-medium px-2 py-0.5 rounded-full border" style="color:var(--muted);border-color:var(--glass-border)">All FPs · ranked by Waste Amount · values always visible</span>
                         <button class="shad-btn shad-btn-outline shad-btn-xs" id="dlSalesBtn" title="Download Image">Image</button>
                     </div>
                 </div>
@@ -1462,164 +1462,203 @@
                     extraCssText: 'box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08); border-radius: 8px;'
                 };
 
-                // Rank by actual waste amount so the most material FPs are visible first.
+                // A readable, no-hover comparison: every FP row shows the FP name,
+                // Sales, Waste, and Waste % at the same time. Bars are independently
+                // normalized so the much smaller Waste amount stays visible.
                 const sorted = rows.slice().sort((a, b) => b.wasteAmount - a.wasteAmount);
                 const names = sorted.map(r => r.fp);
-                const salesValues = sorted.map(r => safeNum(r.salesAmount));
-                const wasteValues = sorted.map(r => safeNum(r.wasteAmount));
-                const maxSales = Math.max(...salesValues, 1);
-                const maxWaste = Math.max(...wasteValues, 1);
-                const visibleEnd = names.length > 10 ? Math.min(100, (10 / names.length) * 100) : 100;
-                const topRanked = new Set(sorted.slice(0, 10).map(r => r.fp));
+                const maxSales = Math.max(...sorted.map(r => safeNum(r.salesAmount)), 1);
+                const maxWaste = Math.max(...sorted.map(r => safeNum(r.wasteAmount)), 1);
+                const rowHeight = names.length > 30 ? 30 : names.length > 20 ? 33 : 36;
+                const chartHeight = Math.max(430, names.length * rowHeight + 90);
+                chartSales.style.height = chartHeight + 'px';
 
-                if (!instSales) instSales = echarts.init(chartSales);
+                // Re-init when height changes to ensure ECharts measures the container correctly.
+                if (instSales) {
+                    instSales.dispose();
+                    instSales = null;
+                }
+                instSales = echarts.init(chartSales);
+
+                const labelFont = 10;
+                const salesLabel = 'Sales';
+                const wasteLabel = 'Waste';
+                const pctLabel = 'Waste %';
+
                 instSales.setOption({
+                    animation: false,
                     tooltip: {
                         ...tooltip,
-                        trigger: 'axis',
-                        axisPointer: { type: 'shadow' },
+                        trigger: 'item',
                         formatter: (params) => {
-                            const idx = params[0]?.dataIndex ?? 0;
-                            const row = sorted[idx];
+                            const row = params.data?.row;
                             if (!row) return '';
                             return [
                                 '<strong>' + row.fp + '</strong>',
                                 'Sales: <strong>' + row.salesAmount.toLocaleString() + ' EGP</strong>',
                                 'Waste: <strong>' + row.wasteAmount.toLocaleString() + ' EGP</strong>',
-                                'Waste % of Sales: <strong>' + row.wastePct.toFixed(2) + '%</strong>',
-                                'Qty Sold: <strong>' + row.qtySold.toLocaleString() + '</strong>',
-                                'Waste Qty: <strong>' + row.wasteQty.toLocaleString() + '</strong>'
+                                'Waste %: <strong>' + row.wastePct.toFixed(2) + '%</strong>'
                             ].join('<br/>');
                         }
                     },
-                    legend: {
-                        data: ['Sales Amount', 'Waste Amount'],
-                        textStyle,
-                        top: 0,
-                        icon: 'roundRect'
-                    },
                     grid: {
                         left: '25%',
-                        right: '8%',
-                        top: '12%',
-                        bottom: names.length > 10 ? '16%' : '8%',
+                        right: '2%',
+                        top: 58,
+                        bottom: 20,
                         containLabel: true
                     },
-                    xAxis: [
-                        {
-                            type: 'value',
-                            name: 'Sales',
-                            nameLocation: 'middle',
-                            nameGap: 28,
-                            nameTextStyle: textStyle,
-                            min: 0,
-                            max: maxSales * 1.12,
-                            axisLabel: { ...textStyle, formatter: fmtCurrency },
-                            splitLine: { lineStyle: { color: colors.border, type: 'dashed' } },
-                            axisLine: { show: true, lineStyle: { color: colors.border } }
-                        },
-                        {
-                            type: 'value',
-                            name: 'Waste',
-                            nameLocation: 'middle',
-                            nameGap: 28,
-                            nameTextStyle: { ...textStyle, color: colors.accent2 },
-                            min: 0,
-                            max: maxWaste * 1.18,
-                            axisLabel: { ...textStyle, color: colors.accent2, formatter: fmtCurrency },
-                            splitLine: { show: false },
-                            axisLine: { show: true, lineStyle: { color: colors.accent2 } },
-                            position: 'top'
-                        }
-                    ],
+                    xAxis: {
+                        type: 'value',
+                        min: 0,
+                        max: 100,
+                        show: false
+                    },
                     yAxis: {
                         type: 'category',
                         inverse: true,
                         data: names,
+                        axisLine: { show: false },
+                        axisTick: { show: false },
                         axisLabel: {
                             ...textStyle,
+                            width: 170,
+                            overflow: 'truncate',
                             fontSize: 10,
-                            formatter: (name) => truncate(name, 23)
+                            align: 'right',
+                            padding: [0, 10, 0, 0]
                         }
                     },
-                    dataZoom: names.length > 10 ? [
+                    graphic: [
                         {
-                            type: 'slider',
-                            yAxisIndex: 0,
-                            right: 8,
-                            top: '12%',
-                            bottom: '17%',
-                            width: 14,
-                            start: 0,
-                            end: visibleEnd,
-                            handleSize: '75%',
-                            textStyle,
-                            borderColor: colors.border,
-                            fillerColor: colors.accent1 + '20',
-                            backgroundColor: colors.card
-                        },
-                        {
-                            type: 'inside',
-                            yAxisIndex: 0,
-                            start: 0,
-                            end: visibleEnd
-                        }
-                    ] : [],
-                    series: [
-                        {
-                            name: 'Sales Amount',
-                            type: 'bar',
-                            xAxisIndex: 0,
-                            data: sorted.map(row => ({
-                                value: safeNum(row.salesAmount),
-                                row
-                            })),
-                            barMaxWidth: 16,
-                            barGap: '25%',
-                            itemStyle: {
-                                color: colors.accent1,
-                                borderRadius: [0, 5, 5, 0],
-                                opacity: 0.78
-                            },
-                            label: {
-                                show: true,
-                                position: 'right',
-                                distance: 5,
-                                formatter: (params) => topRanked.has(params.data.row.fp)
-                                    ? fmtCurrency(params.data.value)
-                                    : '',
-                                color: colors.fg,
-                                fontSize: 9,
-                                fontWeight: 700
+                            type: 'text',
+                            left: '25%',
+                            top: 14,
+                            style: {
+                                text: salesLabel,
+                                fill: colors.fg,
+                                font: '700 11px Plus Jakarta Sans, Inter, sans-serif'
                             }
                         },
                         {
-                            name: 'Waste Amount',
-                            type: 'bar',
-                            xAxisIndex: 1,
-                            data: sorted.map(row => ({
-                                value: safeNum(row.wasteAmount),
-                                row
-                            })),
-                            barMaxWidth: 10,
-                            itemStyle: {
-                                color: colors.accent2,
-                                borderRadius: [0, 5, 5, 0],
-                                opacity: 0.95
-                            },
-                            label: {
-                                show: true,
-                                position: 'right',
-                                distance: 5,
-                                formatter: (params) => topRanked.has(params.data.row.fp)
-                                    ? fmtCurrency(params.data.value)
-                                    : '',
-                                color: colors.accent2,
-                                fontSize: 9,
-                                fontWeight: 800
+                            type: 'text',
+                            left: '57%',
+                            top: 14,
+                            style: {
+                                text: wasteLabel,
+                                fill: colors.fg,
+                                font: '700 11px Plus Jakarta Sans, Inter, sans-serif'
+                            }
+                        },
+                        {
+                            type: 'text',
+                            right: '1%',
+                            top: 14,
+                            style: {
+                                text: pctLabel,
+                                fill: colors.fg,
+                                font: '700 11px Plus Jakarta Sans, Inter, sans-serif'
                             }
                         }
-                    ]
+                    ],
+                    series: [{
+                        type: 'custom',
+                        coordinateSystem: 'cartesian2d',
+                        data: sorted.map((row, index) => ({
+                            value: [
+                                index,
+                                (safeNum(row.salesAmount) / maxSales) * 31,
+                                (safeNum(row.wasteAmount) / maxWaste) * 31,
+                                safeNum(row.wastePct)
+                            ],
+                            row
+                        })),
+                        renderItem: (params, api) => {
+                            const row = params.data.row;
+                            const y = api.coord([0, params.dataIndex])[1];
+                            const x0 = api.coord([0, params.dataIndex])[0];
+                            const salesX = api.coord([31, params.dataIndex])[0];
+                            const wasteStart = api.coord([37, params.dataIndex])[0];
+                            const wasteX = api.coord([37 + (safeNum(row.wasteAmount) / maxWaste) * 31, params.dataIndex])[0];
+                            const pctX = api.coord([91, params.dataIndex])[0];
+                            const barH = Math.min(12, rowHeight * 0.32);
+                            const bgW = salesX - x0;
+
+                            return {
+                                type: 'group',
+                                children: [
+                                    {
+                                        type: 'rect',
+                                        shape: { x: x0, y: y - barH / 2, width: bgW, height: barH, r: 5 },
+                                        style: { fill: colors.border }
+                                    },
+                                    {
+                                        type: 'rect',
+                                        shape: {
+                                            x: x0,
+                                            y: y - barH / 2,
+                                            width: Math.max(2, (safeNum(row.salesAmount) / maxSales) * bgW),
+                                            height: barH,
+                                            r: 5
+                                        },
+                                        style: { fill: colors.accent1, opacity: 0.82 }
+                                    },
+                                    {
+                                        type: 'text',
+                                        style: {
+                                            x: salesX + 6,
+                                            y: y,
+                                            text: fmtCurrency(row.salesAmount),
+                                            textVerticalAlign: 'middle',
+                                            fill: colors.fg,
+                                            font: '700 ' + labelFont + 'px Plus Jakarta Sans, Inter, sans-serif'
+                                        }
+                                    },
+                                    {
+                                        type: 'rect',
+                                        shape: { x: wasteStart, y: y - barH / 2, width: salesX - x0, height: barH, r: 5 },
+                                        style: { fill: colors.border }
+                                    },
+                                    {
+                                        type: 'rect',
+                                        shape: {
+                                            x: wasteStart,
+                                            y: y - barH / 2,
+                                            width: Math.max(2, (safeNum(row.wasteAmount) / maxWaste) * (salesX - x0)),
+                                            height: barH,
+                                            r: 5
+                                        },
+                                        style: { fill: colors.accent2, opacity: 0.95 }
+                                    },
+                                    {
+                                        type: 'text',
+                                        style: {
+                                            x: pctX - 8,
+                                            y: y,
+                                            text: fmtCurrency(row.wasteAmount),
+                                            textAlign: 'right',
+                                            textVerticalAlign: 'middle',
+                                            fill: colors.accent2,
+                                            font: '700 ' + labelFont + 'px Plus Jakarta Sans, Inter, sans-serif'
+                                        }
+                                    },
+                                    {
+                                        type: 'text',
+                                        style: {
+                                            x: pctX + 2,
+                                            y: y,
+                                            text: row.wastePct.toFixed(2) + '%',
+                                            textVerticalAlign: 'middle',
+                                            fill: row.wastePct > 1 ? '#e11d48' : colors.fg,
+                                            font: '800 ' + (labelFont + 1) + 'px Plus Jakarta Sans, Inter, sans-serif'
+                                        }
+                                    }
+                                ]
+                            };
+                        },
+                        encode: { x: 1, y: 0 },
+                        silent: true
+                    }]
                 });
                 instSales.resize();
             }
