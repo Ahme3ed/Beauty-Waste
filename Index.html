@@ -959,8 +959,15 @@
             }
 
             function safeNum(v) {
-                const n = parseFloat(v);
-                return isNaN(n) ? 0 : n;
+                if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+                if (v === null || v === undefined || v === '') return 0;
+                const cleaned = String(v)
+                    .replace(/,/g, '')
+                    .replace(/%/g, '')
+                    .replace(/EGP/gi, '')
+                    .trim();
+                const n = Number(cleaned);
+                return Number.isFinite(n) ? n : 0;
             }
 
             function truncate(str, len) {
@@ -1044,44 +1051,90 @@
             }
 
             function parseSalesSheet(wb) {
-                const salesSheetName = wb.SheetNames.find(name => name.trim().toLowerCase() === 'sales');
-                if (!salesSheetName) return [];
+                if (!wb || !Array.isArray(wb.SheetNames) || wb.SheetNames.length < 2) return [];
 
-                const ws = wb.Sheets[salesSheetName];
-                const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
-                if (!json || json.length === 0) return [];
+                const normalizeHeader = (value) => String(value || '')
+                    .toLowerCase()
+                    .replace(/\s+/g, ' ')
+                    .trim();
 
-                const headers = Object.keys(json[0]);
-                const matchCol = (keys) => headers.find(h =>
-                    keys.some(k => h.toLowerCase().trim() === k.toLowerCase().trim())
-                );
+                const findColumn = (headers, candidates) => {
+                    const normalized = headers.map(h => ({ raw: h, norm: normalizeHeader(h) }));
+                    for (const candidate of candidates) {
+                        const wanted = normalizeHeader(candidate);
+                        const exact = normalized.find(h => h.norm === wanted);
+                        if (exact) return exact.raw;
+                    }
+                    return null;
+                };
 
-                const colFP = matchCol(['Fp Name', 'FP Name', 'Fulfillment Center']);
-                const colQtySold = matchCol(['SUM of Qty Sold', 'Sum of Qty Sold', 'Qty Sold']);
-                const colSalesAmount = matchCol(['SUM of Total Amount', 'Sum of Total Amount', 'Total Amount', 'Sales Amount']);
-                const colWasteQty = matchCol(['Sum Of Wastage Qty', 'SUM of Wastage Qty', 'Wastage Qty']);
-                const colWasteAmount = matchCol(['Sum Of Wastage Amount', 'SUM of Wastage Amount', 'Wastage Amount']);
-                const colWastePct = matchCol(['Waste % Sales', 'Waste % of Sales', 'Waste Percentage']);
+                let best = null;
 
-                if (!colFP || !colSalesAmount || !colWasteAmount) return [];
+                // Detect the Sales sheet by its column structure instead of relying
+                // on a specific worksheet name.
+                for (const sheetName of wb.SheetNames.slice(1)) {
+                    const ws = wb.Sheets[sheetName];
+                    if (!ws) continue;
 
-                return json
+                    const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
+                    if (!json || json.length === 0) continue;
+
+                    const headers = Object.keys(json[0]);
+                    const colFP = findColumn(headers, ['Fp Name', 'FP Name', 'Fulfillment Center']);
+                    const colQtySold = findColumn(headers, ['SUM of Qty Sold', 'Sum of Qty Sold', 'Qty Sold']);
+                    const colSalesAmount = findColumn(headers, [
+                        'SUM of Total Amount',
+                        'Sum of Total Amount',
+                        'Total Amount',
+                        'Sales Amount'
+                    ]);
+                    const colWasteQty = findColumn(headers, ['Sum Of Wastage Qty', 'SUM of Wastage Qty', 'Wastage Qty']);
+                    const colWasteAmount = findColumn(headers, [
+                        'Sum Of Wastage Amount',
+                        'SUM of Wastage Amount',
+                        'Wastage Amount'
+                    ]);
+                    const colWastePct = findColumn(headers, ['Waste % Sales', 'Waste % of Sales', 'Waste Percentage']);
+
+                    const score =
+                        (colFP ? 3 : 0) +
+                        (colSalesAmount ? 3 : 0) +
+                        (colWasteAmount ? 3 : 0) +
+                        (colQtySold ? 1 : 0) +
+                        (colWasteQty ? 1 : 0) +
+                        (colWastePct ? 1 : 0) +
+                        (normalizeHeader(sheetName) === 'sales' ? 2 : 0);
+
+                    if (!colFP || !colSalesAmount || !colWasteAmount || score < 9) continue;
+
+                    if (!best || score > best.score) {
+                        best = { sheetName, json, colFP, colQtySold, colSalesAmount, colWasteQty, colWasteAmount, colWastePct, score };
+                    }
+                }
+
+                if (!best) return [];
+
+                return best.json
                     .filter(row => {
-                        const fp = String(row[colFP] || '').trim();
+                        const fp = String(row[best.colFP] || '').trim();
                         return fp && fp.toLowerCase() !== 'grand total';
                     })
                     .map(row => {
-                        const salesAmount = safeNum(row[colSalesAmount]);
-                        const wasteAmount = safeNum(row[colWasteAmount]);
-                        let wastePct = safeNum(row[colWastePct]);
+                        const salesAmount = safeNum(row[best.colSalesAmount]);
+                        const wasteAmount = safeNum(row[best.colWasteAmount]);
+                        let wastePct = safeNum(row[best.colWastePct]);
+
+                        // If the workbook stores 0.0222 instead of 2.22%, convert it.
                         if (wastePct > 0 && wastePct < 1) wastePct *= 100;
-                        if (!wastePct && salesAmount > 0) wastePct = (wasteAmount / salesAmount) * 100;
+                        if (!wastePct && salesAmount > 0) {
+                            wastePct = (wasteAmount / salesAmount) * 100;
+                        }
 
                         return {
-                            fp: String(row[colFP] || '').trim(),
-                            qtySold: colQtySold ? safeNum(row[colQtySold]) : 0,
+                            fp: String(row[best.colFP] || '').trim(),
+                            qtySold: best.colQtySold ? safeNum(row[best.colQtySold]) : 0,
                             salesAmount,
-                            wasteQty: colWasteQty ? safeNum(row[colWasteQty]) : 0,
+                            wasteQty: best.colWasteQty ? safeNum(row[best.colWasteQty]) : 0,
                             wasteAmount,
                             wastePct
                         };
